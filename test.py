@@ -133,7 +133,6 @@ class SiameseNetwork(nn.Module):
             nn.Dropout(p=0.3),
         )
 
-        # Defining the fully connected layers
         self.fc1 = nn.Sequential(
             nn.Linear(30976, 1024),
             nn.ReLU(inplace=True),
@@ -143,16 +142,15 @@ class SiameseNetwork(nn.Module):
             nn.Linear(128, 2))
 
     def forward_once(self, x):
-        # Forward pass
         output = self.cnn1(x)
         output = output.view(output.size()[0], -1)
         output = self.fc1(output)
         return output
 
     def forward(self, input1, input2):
-        # forward pass of input 1
+        # input 1
         output1 = self.forward_once(input1)
-        # forward pass of input 2
+        # input 2
         output2 = self.forward_once(input2)
         return output1, output2
 
@@ -185,11 +183,11 @@ train_dataloader = DataLoader(siamese_dataset,
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 print(device)
 
-# Declare Siamese Network
+# СНС
 net = SiameseNetwork().to(device)
-# Declare Loss Function
+# Функция ошибки
 criterion = ContrastiveLoss()
-# Declare Optimizer
+# Алгоритм оптимизации
 optimizer = optim.RMSprop(net.parameters(), lr=1e-4, alpha=0.99, eps=1e-8, weight_decay=0.0005, momentum=0.9)
 
 
@@ -223,17 +221,17 @@ test_dataloader = DataLoader(test_dataset, num_workers=1, batch_size=1, shuffle=
 def test():
     # Print the sample outputs to view its dissimilarity
     # counter = 0
-    list_0 = torch.FloatTensor([[0]])
+    label_zero = torch.FloatTensor([[0]])
     test_correct = 0
     print(str(len(test_dataloader)))
     for data in test_dataloader:
         x0, x1, label = data
         # print("label=" + str(label.item()))
-        if label == list_0:
+        if label == label_zero:
             label = "Original"
         else:
             label = "Forged"
-        concatenated = torch.cat((x0, x1), 0)
+        # concatenated = torch.cat((x0, x1), 0)
         output1, output2 = model(x0.to(device), x1.to(device))
         eucledian_distance = F.pairwise_distance(output1, output2)
         pred = "Forged"
@@ -251,22 +249,22 @@ def test():
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 if __name__ == '__main__':
-    model = train()
-    torch.save(model.state_dict(), "model.pt")
-    print("Model Saved Successfully")
+    # model = train()
+    # torch.save(model.state_dict(), "model.pt")
+    # print("Model Saved Successfully")
 
     # Load the saved model
-    # model = SiameseNetwork().to(device)
-    # if torch.cuda.is_available():
-    #     model.load_state_dict(torch.load("model.pt"))
-    # else:
-    #     model.load_state_dict(torch.load("model.pt", map_location=torch.device('cpu')))
-    #
-    # now = datetime.now()
-    # current_time = now.strftime("%H:%M:%S")
-    # print("Start Time =", current_time)
-    # test_acc = test()
-    # print(f'Test Accuracy: {test_acc:.4f}')
-    # now = datetime.now()
-    # current_time = now.strftime("%H:%M:%S")
-    # print("End Time =", current_time)
+    model = SiameseNetwork().to(device)
+    if torch.cuda.is_available():
+        model.load_state_dict(torch.load("model.pt"))
+    else:
+        model.load_state_dict(torch.load("model.pt", map_location=torch.device('cpu')))
+
+    now = datetime.now()
+    current_time = now.strftime("%H:%M:%S")
+    print("Start Time =", current_time)
+    test_acc = test()
+    print(f'Test Accuracy: {test_acc:.4f}')
+    now = datetime.now()
+    current_time = now.strftime("%H:%M:%S")
+    print("End Time =", current_time)
