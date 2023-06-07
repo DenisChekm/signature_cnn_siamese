@@ -18,10 +18,10 @@ import torch.nn as nn
 from torch import optim
 import torch.nn.functional as F
 
-train_dir = "../input/sign_data/sign_data/train"
-train_csv = "../input/sign_data/sign_data/train_data.csv"
-test_csv = "../input/sign_data/sign_data/test_data.csv"
-test_dir = "../input/sign_data/sign_data/test"
+train_dir = "../sign_data/train"
+train_csv = "../sign_data/train_data.csv"
+test_csv = "../sign_data/test_data.csv"
+test_dir = "../sign_data/test"
 
 
 class Dataset(Dataset):
@@ -116,7 +116,7 @@ class SiameseNetwork(nn.Module):
 
 class ContrastiveLoss(torch.nn.Module):
 
-    def __init__(self, margin=1.5):
+    def __init__(self, margin=1.0):
         super(ContrastiveLoss, self).__init__()
         self.margin = margin
 
@@ -135,6 +135,7 @@ def train(epochs_num):
     optimizer = optim.RMSprop(net.parameters(), lr=1e-4, alpha=0.99)
     loss = []
 
+    steps_count = len(train_dataloader)
     for epoch in range(0, epochs_num):
         for i, data in enumerate(train_dataloader, 0):
             img0, img1, label = data
@@ -145,9 +146,17 @@ def train(epochs_num):
             loss_contrastive.backward()
             optimizer.step()
             if i % 50 == 0:
-                print("Epoch {}; Step {}; Current loss {}\n".format(epoch, i, loss_contrastive.item()))
+                # print("Epoch {}/{}; Step {}/{}; Current loss {}\n"
+                #       .format(epoch, epochs_num, i, steps_count, loss_contrastive.item()))
                 loss.append(loss_contrastive.item())
-        #print("Epoch {}\n Current loss {}\n".format(epoch, loss_contrastive.item()))
+        # print("Epoch {}/{}; Step {}/{}; Current loss {}\n"
+        #       .format(epoch, epochs_num, steps_count, steps_count, loss_contrastive.item()))
+        loss.append(loss_contrastive.item())
+
+    with open('train losses.txt', 'w', encoding='utf-8') as f:
+        for i in range(len(loss)):
+            f.write(str(loss[i]))
+
     return net
 
 
@@ -161,55 +170,50 @@ def imshow(img, text=None, should_save=False):
     plt.show()
 
 
+class TestInfo:
+    euclidean_distance = []
+    labels = []
+    predicts = []
+
+
 def test():
     count = 0
     test_acc = 0
+    test_info = TestInfo()
     for i, data in enumerate(test_dataloader, 0):
         x0, x1, label = data
         # concat = torch.cat((x0, x1), 0)
         output1, output2 = model(x0.to(device), x1.to(device))
-        eucledian_distance = F.pairwise_distance(output1, output2)
+        euclidean_distance = F.pairwise_distance(output1, output2)
 
         if label == torch.FloatTensor([[0]]):
-            label = "Original Pair Of Signature"
+            label = "Original"
         else:
-            label = "Forged Pair Of Signature"
+            label = "Forged"
 
-        pred = "Forged Pair Of Signature"
-        if eucledian_distance < 0.41:
-            pred = "Original Pair Of Signature"
+        predict = "Forged"
+        if euclidean_distance < 0.41:
+            predict = "Original"
 
-        if label[0] == pred[0]:
+        if label[0] == predict[0]:
             test_acc += 1
+
+        test_info.euclidean_distance.append(euclidean_distance.item())
+        test_info.labels.append(label)
+        test_info.predicts.append(predict)
         # imshow(torchvision.utils.make_grid(concat))
-        print("Predicted Eucledian Distance:-", eucledian_distance.item())
-        print("Actual Label:-", label)
-        print("Predicted Label: ", pred)
-        print("======================================================")
         # count += 1
         # if count == 1000:
         #     break
-
+    with open('test results.txt', 'w', encoding='utf-8') as f:
+        f.write("Predicted Euclidean Distance, Actual Label, Predicted Label\n")
+        for i in range(len(test_dataloader)):
+            f.write(str(test_info.euclidean_distance[i]) + ', ' + test_info.labels[i] + ', ' + test_info.predicts[i] + '\n')
     test_acc /= len(test_dataloader)
     return test_acc
 
 
 if __name__ == '__main__':
-    df_train = pd.read_csv(train_csv)
-    print(df_train.sample(10))
-    print('==============')
-    df_test = pd.read_csv(test_csv)
-    print(df_test.sample(10))
-    print('==============')
-    print(df_train.shape)
-    print('==============')
-    print(df_test.shape)
-    print('==============')
-    print(df_train[4:5])
-    print('==============')
-    image1_path = os.path.join(train_dir, df_train.iat[4, 0])
-    print(image1_path)
-
     dataset = Dataset(train_dir, train_csv,
                       transform=transforms.Compose([transforms.Resize((100, 100)), transforms.ToTensor()]))
     train_dataloader = DataLoader(dataset,
@@ -218,6 +222,9 @@ if __name__ == '__main__':
                                   batch_size=32)
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print(device)
+
+    seed = 10
+    torch.manual_seed(seed)
 
     now = datetime.now()
     current_time = now.strftime("%H:%M:%S")
@@ -241,5 +248,5 @@ if __name__ == '__main__':
 
     test_dataloader = DataLoader(test_dataset, num_workers=1, batch_size=1, shuffle=True)
 
-    test_acc = test()
-    print(test_acc)
+    test_accuracy = test()
+    print(test_accuracy)
