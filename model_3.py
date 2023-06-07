@@ -7,6 +7,7 @@ from datetime import datetime
 import torchvision
 import torchvision.datasets as dset
 import torchvision.transforms as transforms
+from torch.optim.lr_scheduler import StepLR
 from torch.utils.data import DataLoader, Dataset
 import matplotlib.pyplot as plt
 import torchvision.utils
@@ -128,106 +129,87 @@ class ContrastiveLoss(torch.nn.Module):
         return loss_contrastive
 
 
-def train(epochs_num, nn_model, train_dataloader, device):
+def train(nn_model, device, train_dataloader, optimizer, epoch):
+    nn_model.train()
+
     criterion = ContrastiveLoss()
 
-    # optimizer = torch.optim.SGD(net.parameters(), lr=3e-4)
-    optimizer = optim.RMSprop(nn_model.parameters(), lr=1e-4, alpha=0.99)
-
-    loss = []
     batch_i_log = 50
-    steps_count = len(train_dataloader)
-    for epoch in range(0, epochs_num):
-        for batch_i, data in enumerate(train_dataloader, 0):
-            img0, img1, label = data
+    steps_count = len(train_dataloader) - 1
+    loss_contrastive = 0
+    for batch_i, batch_data in enumerate(train_dataloader):
+        img0, img1, label = batch_data
+        img0, img1, label = img0.to(device), img1.to(device), label.to(device)
+
+        optimizer.zero_grad()
+        output1, output2 = nn_model(img0, img1)
+
+        loss_contrastive = criterion(output1, output2, label)
+        loss_contrastive.backward()
+        optimizer.step()
+
+        if batch_i % batch_i_log == 0:
+            print("Train Epoch {}; Step {}/{}; Current loss {:.6f}"
+                  .format(epoch, batch_i, steps_count, loss_contrastive.item()))
+        elif batch_i == steps_count:
+            print("Train Epoch {}; Step {}/{}; Current loss {:.6f}"
+                  .format(epoch, batch_i, steps_count, loss_contrastive.item()))
+
+    #return loss_contrastive
+
+
+def test(nn_model, device, test_loader):
+    nn_model.eval()
+
+    criterion = ContrastiveLoss()
+    correct = 0
+    threshold = 0.41
+    running_loss = 0.0
+    with torch.no_grad():
+        for batch_data in test_loader:
+            img0, img1, label = batch_data
             img0, img1, label = img0.to(device), img1.to(device), label.to(device)
 
-            optimizer.zero_grad()
-
             output1, output2 = nn_model(img0, img1)
+            loss = criterion(output1, output2, label)
 
-            loss_contrastive = criterion(output1, output2, label)
-            loss_contrastive.backward()
+            euclidean_distance = F.pairwise_distance(output1, output2)
+            if label == torch.FloatTensor([[0]]):
+                label = "Orig"
+            else:
+                label = "Forg"
 
-            optimizer.step()
-            if batch_i % batch_i_log == 0:
-                print("Epoch {}/{}; Step {}/{}; Current loss {}\n"
-                      .format(epoch, epochs_num, batch_i, steps_count, loss_contrastive.item()))
-                loss.append(loss_contrastive.item())
-            elif batch_i == steps_count:
-                print("Epoch {}/{}; Step {}/{}; Current loss {}\n"
-                      .format(epoch, epochs_num, steps_count, steps_count, loss_contrastive.item()))
-                loss.append(loss_contrastive.item())
+            predict = "Forg"
+            if euclidean_distance < threshold:
+                predict = "Orig"
 
-    with open('train losses.txt', 'w', encoding='utf-8') as f:
-        for batch_i in range(len(loss)):
-            f.write(str(loss[batch_i])+'\n')
+            if label[0] == predict[0]:
+                correct += 1
 
-    return nn_model
+            running_loss += loss.item()
 
-
-def imshow(img, text=None, should_save=False):
-    npimg = img.numpy()
-    plt.axis("off")
-    if text:
-        plt.text(75, 8, text, style='italic', fontweight='bold',
-                 bbox={'facecolor': 'white', 'alpha': 0.8, 'pad': 10})
-    plt.imshow(np.transpose(npimg, (1, 2, 0)))
-    plt.show()
-
-
-class TestInfo:
-    euclidean_distance = []
-    labels = []
-    predicts = []
-
-
-def test(test_dataloader, model, device):
-    count = 0
-    test_acc = 0
-    test_info = TestInfo()
-    for i, data in enumerate(test_dataloader, 0):
-        x0, x1, label = data
-        # concat = torch.cat((x0, x1), 0)
-        output1, output2 = model(x0.to(device), x1.to(device))
-        euclidean_distance = F.pairwise_distance(output1, output2)
-
-        if label == torch.FloatTensor([[0]]):
-            label = "Original"
-        else:
-            label = "Forged"
-
-        predict = "Forged"
-        if euclidean_distance < 0.41:
-            predict = "Original"
-
-        if label[0] == predict[0]:
-            test_acc += 1
-
-        test_info.euclidean_distance.append(euclidean_distance.item())
-        test_info.labels.append(label)
-        test_info.predicts.append(predict)
-        # imshow(torchvision.utils.make_grid(concat))
-        # count += 1
-        # if count == 1000:
-        #     break
-    with open('test results.txt', 'w', encoding='utf-8') as f:
-        f.write("Predicted Euclidean Distance, Actual Label, Predicted Label\n")
-        for i in range(len(test_dataloader)):
-            f.write(str(test_info.euclidean_distance[i]) + ', ' + test_info.labels[i] + ', ' + test_info.predicts[i] + '\n')
-    test_acc /= len(test_dataloader)
-    return test_acc
+    test_acc = 100 * correct / len(test_loader)
+    print('Test Accuracy: {}/{} ({:.4f}%) Test Loss: {}'.format(
+        correct, len(test_loader.dataset), test_acc, running_loss))
 
 
 def main():
-    epochs = 10
+    # Training settings
+    cpu_cores_number = 4
+    epochs_count = 10
     batch_size = 32
+
     dataset = Dataset(train_dir, train_csv,
                       transform=transforms.Compose([transforms.Resize((100, 100)), transforms.ToTensor()]))
     train_dataloader = DataLoader(dataset,
-                                  shuffle=True,
-                                  num_workers=1,
-                                  batch_size=batch_size)
+                                  num_workers=cpu_cores_number,
+                                  batch_size=batch_size,
+                                  shuffle=True)
+
+    test_dataset = Dataset(test_dir, test_csv,
+                           transform=transforms.Compose([transforms.Resize((100, 100)), transforms.ToTensor()]))
+    test_dataloader = DataLoader(test_dataset, num_workers=1, batch_size=1, shuffle=True)
+
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print(device)
 
@@ -235,35 +217,23 @@ def main():
     torch.manual_seed(seed)
 
     nn_model = SiameseNetwork().to(device)
+    optimizer = optim.RMSprop(nn_model.parameters(), lr=1e-4, alpha=0.99)
+
     now = datetime.now()
     current_time = now.strftime("%H:%M:%S")
     print("Start Time =", current_time)
 
-    model = train(epochs, nn_model, train_dataloader, device)
+    for epoch in range(1, epochs_count + 1):
+        train(nn_model, device, train_dataloader, optimizer, epoch)
+        test(nn_model, device, test_dataloader)
 
     now = datetime.now()
-
     current_time = now.strftime("%H:%M:%S")
     print("End Time =", current_time)
 
-    model_name = "model_2.pt"
-    torch.save(model.state_dict(), model_name)
+    model_name = "model_3.pt"
+    torch.save(nn_model.state_dict(), model_name)
     print("Model Saved Successfully")
-
-    # Load the saved model
-    nn_model = SiameseNetwork().to(device)
-    if torch.cuda.is_available():
-        nn_model.load_state_dict(torch.load(model_name))
-    else:
-        nn_model.load_state_dict(torch.load(model_name, map_location=torch.device('cpu')))
-
-    test_dataset = Dataset(test_dir, test_csv,
-                           transform=transforms.Compose([transforms.Resize((100, 100)), transforms.ToTensor()]))
-
-    test_dataloader = DataLoader(test_dataset, num_workers=1, batch_size=1, shuffle=True)
-
-    test_accuracy = test(test_dataloader, nn_model, device)
-    print(test_accuracy)
 
 
 if __name__ == '__main__':
