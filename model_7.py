@@ -106,12 +106,10 @@ class SiameseNetwork(nn.Module):
         x2 = x2.view(-1, 256 * 6 * 6)
         x2 = self.sigmoid(self.fc1(x2))
 
-        print(x1)
-        print(x2)
         x = torch.abs(x1 - x2)
-        print(x)
+
         x = self.fcOut(x)
-        print(x)
+        x = torch.abs(x)    # trash?
         return x
 
 
@@ -135,8 +133,6 @@ def train_valid(train_dataloader, val_dataloader):
             optimizer.zero_grad()
             outputs = nn_model(img0, img1)
 
-            # print(outputs)
-            # print(labels)
             loss = criterion(outputs, labels)
             loss.backward()
             optimizer.step()

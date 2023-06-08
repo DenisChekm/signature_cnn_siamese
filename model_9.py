@@ -26,11 +26,78 @@ CPU_CORES_NUM = 4
 BATCH_SIZE = 128
 NUM_EPOCHS = 10
 threshold = 0.41
-MODEL_NAME = 'model_6.pt'
+MODEL_NAME = 'model_9.pt'
 
 train_losses = []
 eval_losses = []
 eval_accu = []
+
+
+class ContrastiveDataset(Dataset):
+    def __init__(self, df, transforms, base="../input/shopee-product-matching/train_images"):
+        self.base = base
+        self.transforms = transforms
+        # getting all unique label_groups
+        self.labels = list(df['label_group'].unique())
+        # we put the image names of each label_group in front of it in a big dictionary
+        self.labels_to_imgs = {label: df[df['label_group'] == label].image.values
+                               for label in self.labels}
+
+    def __getitem__(self, idx):
+        label = self.labels[idx]
+
+        if random.random() > 0.5:
+            same = True
+            same_label_images = self.labels_to_imgs[label]
+            img1, img2 = np.random.choice(same_label_images,
+                                          size=2,
+                                          replace=False if len(same_label_images) > 1 else True)
+        else:
+            same = False
+            img1 = np.random.choice(self.labels_to_imgs[label], size=1)[0]
+            while True:
+                different_label = np.random.choice(self.labels, size=1)[0]
+                if different_label != label:
+                    break
+            img2 = np.random.choice(self.labels_to_imgs[different_label], size=1)[0]
+
+        img1_tensor, img2_tensor = self.process_imgs(img1, img2)
+
+        # returning everything :)
+        return {'images1': img1_tensor,
+                'images2': img2_tensor,
+                'same': torch.tensor(same).float(),
+                'label1': label,
+                'label2': label if same else different_label,
+                'image1_name': img1,
+                'image2_name': img2}
+
+    def read_transform_one(self, img):
+        img = cv2.imread(f"{self.base}/{img}")[..., ::-1]
+        if self.transforms is not None:
+            img = self.transforms(image=img)['image']
+        return torch.tensor(img).float()
+
+    def process_imgs(self, img1, img2):
+        img1 = self.read_transform_one(img1).permute(2, 0, 1)
+        img2 = self.read_transform_one(img2).permute(2, 0, 1)
+        return img1, img2
+
+    def __len__(self):
+        return len(self.labels)
+
+
+def remove_normalization(image, mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225)):
+    """
+    Function to undo the normalization done in the dataset.
+    Useful for visualization purposes
+
+    :param image: tensor with shape -> (channel, height, width)
+    """
+    mean, std = torch.tensor(mean), torch.tensor(std)
+    mean = mean.unsqueeze(1).unsqueeze(2)
+    std = std.unsqueeze(1).unsqueeze(2)
+    return image * std + mean
 
 
 class SignatureDataset(Dataset):
@@ -241,6 +308,7 @@ def main():
     plt.ylabel('losses')
     plt.legend(['Train', 'Valid'])
     plt.title('Train vs Valid Losses')
+    plt.grid()  # grid()
     plt.show()
 
     # Testing model
@@ -252,6 +320,7 @@ def main():
     # plt.ylabel('accuracy')
     # plt.legend(['Valid'])
     # plt.title('Valid Accuracy')
+    # plt.grid()
     # plt.show()
 
 
