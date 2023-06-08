@@ -198,6 +198,8 @@ def main():
     cpu_cores_number = 4
     epochs_count = 10
     batch_size = 32
+    seed = 10
+    torch.manual_seed(seed)
 
     dataset = Dataset(train_dir, train_csv,
                       transform=transforms.Compose([transforms.Resize((100, 100)), transforms.ToTensor()]))
@@ -205,7 +207,6 @@ def main():
                                   num_workers=cpu_cores_number,
                                   batch_size=batch_size,
                                   shuffle=True)
-
     test_dataset = Dataset(test_dir, test_csv,
                            transform=transforms.Compose([transforms.Resize((100, 100)), transforms.ToTensor()]))
     test_dataloader = DataLoader(test_dataset, num_workers=1, batch_size=1, shuffle=True)
@@ -213,8 +214,7 @@ def main():
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print(device)
 
-    seed = 10
-    torch.manual_seed(seed)
+
 
     nn_model = SiameseNetwork().to(device)
     optimizer = optim.RMSprop(nn_model.parameters(), lr=1e-4, alpha=0.99)
