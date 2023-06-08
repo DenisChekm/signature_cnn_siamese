@@ -20,6 +20,9 @@ train_csv = "../sign_data/train_data.csv"
 test_csv = "../sign_data/test_data.csv"
 test_dir = "../sign_data/test"
 model_name = 'model_4.pt'
+train_losses = []
+val_losses = []
+
 
 class MyDataset(Dataset):
     # default constuctor for assigning values
@@ -154,8 +157,8 @@ def train(nn_model, criterion, device, train_dataloader, optimizer, epoch):
     # return loss_contrastive
 
 
-def validate(nn_model, criterion, device, test_loader):
-    valid_loss = 0.0
+def test_acc_loss(nn_model, criterion, device, test_loader):
+    test_loss = 0.0
     correct = 0
     threshold = 0.41
     nn_model.eval()
@@ -167,7 +170,7 @@ def validate(nn_model, criterion, device, test_loader):
 
             output1, output2 = nn_model(img0, img1)
             loss = criterion(output1, output2, label)
-            valid_loss += loss.item()
+            test_loss += loss.item()
 
             euclidean_distance = F.pairwise_distance(output1, output2)
             if label_1 == torch.FloatTensor([[0]]):
@@ -183,8 +186,9 @@ def validate(nn_model, criterion, device, test_loader):
                 correct += 1
 
     test_acc = 100 * correct / len(test_loader)
-    print('Val acc: {}/{} ({:.4f}%) Val loss: {} \n'.format(
-        correct, len(test_loader.dataset), test_acc, valid_loss))
+    test_loss /= len(test_loader)
+    print('Test acc: {}/{} ({:.4f}%) Test loss: {} \n'.format(
+        correct, len(test_loader.dataset), test_acc, test_loss))
 
 
 def train_valid(train_dataloader, val_dataloader, device, num_epochs):
@@ -240,7 +244,7 @@ def train_valid(train_dataloader, val_dataloader, device, num_epochs):
         if min_valid_loss > valid_loss:
             print("Val loss decreased ({:.6f}->{:.6f})\t Saving the model\n".format(min_valid_loss, valid_loss))
             min_valid_loss = valid_loss
-            torch.save(nn_model.state_dict(), "model_4.pt")
+            torch.save(nn_model.state_dict(), model_name)
 
 
 class TestInfo:
@@ -259,44 +263,45 @@ def imshow(img, text=None, should_save=False):
     plt.show()
 
 
-# def test_with_stats(nn_model, device, test_dataloader, model_name="model_4.pt"):
-#     if torch.cuda.is_available():
-#         nn_model.load_state_dict(torch.load(model_name))
-#     else:
-#         nn_model.load_state_dict(torch.load(model_name, map_location=torch.device('cpu')))
-#     threshold = 0.41
-#     test_info = TestInfo()
-#     test_acc = 0.0
-#     for i, batch_data in enumerate(test_dataloader, 0):
-#         img0, img1, label_1 = batch_data
-#         img0, img1, label = img0.to(device), img1.to(device), label_1.to(device)
-#
-#         output1, output2 = nn_model(img0, img1)
-#         euclidean_distance = F.pairwise_distance(output1, output2)
-#
-#         if label_1 == torch.FloatTensor([[0]]):
-#             label = "Orig"
-#         else:
-#             label = "Forg"
-#
-#         predict = "Forg"
-#         if euclidean_distance < threshold:
-#             predict = "Orig"
-#         if label[0] == predict[0]:
-#             test_acc += 1
-#
-#         test_info.euclidean_distance.append(euclidean_distance.item())
-#         test_info.labels.append(label)
-#         test_info.predicts.append(predict)
-#         if i == 10:
-#             break
-#     with open('test results.txt', 'w', encoding='utf-8') as f:
-#         f.write("Predicted Euclidean Distance, Actual Label, Predicted Label\n")
-#         for j in range(len(test_dataloader)):
-#             f.write(str(test_info.euclidean_distance[j]) + ', '
-#                     + test_info.labels[j] + ', ' + test_info.predicts[j] + '\n')
-#     test_acc /= len(test_dataloader)
-#     print(test_acc)
+def test_with_stats(nn_model, device, test_dataloader):
+    if torch.cuda.is_available():
+        nn_model.load_state_dict(torch.load(model_name))
+    else:
+        nn_model.load_state_dict(torch.load(model_name, map_location=torch.device('cpu')))
+
+    test_info = TestInfo()
+    threshold = 0.41
+    test_acc = 0.0
+    for i, batch_data in enumerate(test_dataloader, 0):
+        img0, img1, label_1 = batch_data
+        img0, img1, label = img0.to(device), img1.to(device), label_1.to(device)
+
+        output1, output2 = nn_model(img0, img1)
+        euclidean_distance = F.pairwise_distance(output1, output2)
+
+        if label_1 == torch.FloatTensor([[0]]):
+            label = "Orig"
+        else:
+            label = "Forg"
+
+        predict = "Forg"
+        if euclidean_distance < threshold:
+            predict = "Orig"
+        if label[0] == predict[0]:
+            test_acc += 1
+
+        test_info.euclidean_distance.append(euclidean_distance.item())
+        test_info.labels.append(label)
+        test_info.predicts.append(predict)
+        if i == 10:
+            break
+    with open('test results.txt', 'w', encoding='utf-8') as f:
+        f.write("Predicted Euclidean Distance, Actual Label, Predicted Label\n")
+        for j in range(len(test_dataloader)):
+            f.write(str(test_info.euclidean_distance[j]) + ', '
+                    + test_info.labels[j] + ', ' + test_info.predicts[j] + '\n')
+    test_acc /= len(test_dataloader)
+    print(test_acc)
 
 
 def test(dataloader, nn_model, device):
