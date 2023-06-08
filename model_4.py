@@ -234,7 +234,7 @@ def train_valid(train_dataloader, val_dataloader, device, num_epochs):
                 valid_loss += loss.item()
 
         train_loss /= len(train_dataloader.dataset)
-        valid_loss /= len(val_dataloader)
+        valid_loss /= len(val_dataloader.dataset)
         print("Epoch {}; Train loss {:.6f}; Val loss {:.6f}\n".format(epoch, train_loss, valid_loss, ))
 
         if min_valid_loss > valid_loss:
@@ -327,7 +327,6 @@ def main():
     seed = 10
     torch.manual_seed(seed)
 
-    # 'train' and 'val' datasets
     train_dataset = MyDataset(train_dir, train_csv,
                               transform=transforms.Compose([transforms.Resize((100, 100)), transforms.ToTensor()]))
     train_dataloader = DataLoader(train_dataset, num_workers=cpu_cores_number, batch_size=batch_size, shuffle=True)
