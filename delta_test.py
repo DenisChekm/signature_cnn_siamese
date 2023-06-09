@@ -11,7 +11,7 @@ from typing import Tuple
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch.optim import Adam
+from torch.optim import Adam, RMSprop
 from torch.utils.data import DataLoader, Dataset
 
 from skimage import img_as_ubyte
@@ -50,10 +50,10 @@ if not os.path.exists(OUTPUT_DIR):
 class CFG:
     apex = False
     debug = False
-    print_freq = 100
+    print_freq = 50
     size = 128
     num_workers = 4
-    epochs = 20
+    epochs = 10
     batch_size = 32
     lr = 1e-3
     weight_decay = 1e-3
@@ -61,9 +61,9 @@ class CFG:
     gradient_accumulation_steps = 1
     max_grad_norm = 1000
     target_size = train["label"].shape[0]
-    nfolds = 5
+    threshold = 0.41
     trn_folds = [0]
-    model_name = 'convnet'  # 'vit_base_patch32_224_in21k' 'tf_efficientnetv2_b0' 'resnext50_32x4d' 'tresnet_m'
+    model_name = 'delta_test.pt'  # 'vit_base_patch32_224_in21k' 'tf_efficientnetv2_b0' 'resnext50_32x4d' 'tresnet_m'
     train = True
     early_stop = True
     target_col = "label"
@@ -510,10 +510,9 @@ def time_since(since, percent):
     return '%s (remain %s)' % (as_minutes(s), as_minutes(rs))
 
 
-def train_fn(fold, train_loader, model, criterion, optimizer, epoch):
+def train_fn(train_loader, model, criterion, optimizer, epoch):
     data_time = AverageMeter()
     losses = AverageMeter()
-    scores = AverageMeter()
     # switch to train mode
     model.train()
     start = end = time.time()
@@ -527,8 +526,7 @@ def train_fn(fold, train_loader, model, criterion, optimizer, epoch):
 
         batch_size = labels.size(0)
         out1, out2, preds = model(img1, img2)
-        loss1 = criterion(out1, out2, labels)
-        loss = loss1
+        loss = criterion(out1, out2, labels)
 
         # record loss
         losses.update(loss.item(), batch_size)
@@ -552,6 +550,38 @@ def train_fn(fold, train_loader, model, criterion, optimizer, epoch):
     return losses.avg
 
 
+def val_fn(val_loader, model, criterion, epoch):
+    data_time = AverageMeter()
+    losses = AverageMeter()
+    # switch to train mode
+    model.eval()
+    start = end = time.time()
+    global_step = 0
+    with torch.no_grad():
+        for step, (img1, img2, labels) in enumerate(val_loader):
+            # measure data loading time
+            data_time.update(time.time() - end)
+            img1 = img1.to(device).float()
+            img2 = img2.to(device).float()
+            labels = labels.to(device)
+
+            batch_size = labels.size(0)
+            out1, out2, preds = model(img1, img2)
+            loss = criterion(out1, out2, labels)
+
+            # record loss
+            losses.update(loss.item(), batch_size)
+
+            # measure elapsed time
+            end = time.time()
+            if step % CFG.print_freq == 0 or step == (len(val_loader) - 1):
+                print(f'Epoch: [{epoch}][{step}/{len(val_loader)}] ', end='')
+                print(f'Elapsed: {time_since(start, float(step + 1) / len(val_loader))} ', end='')
+                print(f'Loss: {losses.val:.4f}({losses.avg:.4f} ')
+
+    return losses.avg
+
+
 def imshow(img, text=None, save=False):
     npimg = img.numpy()
     plt.axis('off')
@@ -569,16 +599,107 @@ def show_plot(iteration, loss):
     plt.show()
 
 
-def main():
-    # print("Train\n:" + str(train["label"].value_counts(normalize=True)))
-    # print("Test\n:" + str(test["label"].value_counts(normalize=True)))
+def train_valid(train_dataloader, val_dataloader):
+    nn_model = SiameseModel().to(device)
+    criterion = ContrastiveLoss()
+    # optimizer = RMSprop(nn_model.parameters(), lr=1e-4, alpha=0.99)
+    optimizer = Adam(nn_model.parameters(), lr=CFG.lr, weight_decay=CFG.weight_decay)
 
+    train_losses = []
+    val_losses = []
+
+    num_train_batches = len(train_dataloader) - 1
+    min_valid_loss = np.inf
+
+    for epoch in range(1, CFG.epochs + 1):
+
+        train_loss = 0.0
+        nn_model.train()
+        for batch_i, batch_data in enumerate(train_dataloader):
+            img0, img1, labels = batch_data
+            img0, img1, labels = img0.to(device), img1.to(device), labels.to(device)
+
+            optimizer.zero_grad()
+            output1, output2 = nn_model(img0, img1)
+
+            loss = criterion(output1, output2, labels)
+            loss.backward()
+            optimizer.step()
+
+            train_loss += loss.item()
+
+            if batch_i % CFG.print_freq == 0:
+                print("Epoch: [{}] [{}/{}] Loss {:.6f}"
+                      .format(epoch, batch_i, num_train_batches, loss.item()))
+            elif batch_i == num_train_batches:
+                print("Epoch: [{}] [{}/{}] Loss {:.6f}"
+                      .format(epoch, batch_i, num_train_batches, loss.item()))
+
+        avg_train_loss = train_loss / len(train_dataloader)
+        train_losses.append(avg_train_loss)
+
+        val_loss = 0.0
+        nn_model.eval()
+        with torch.no_grad():
+            for batch_data in val_dataloader:
+                img0, img1, labels = batch_data
+                img0, img1, labels = img0.to(device), img1.to(device), labels.to(device)
+
+                output1, output2 = nn_model(img0, img1)
+                loss = criterion(output1, output2, labels)
+
+                val_loss += loss.item()
+
+        avg_val_loss = val_loss / len(val_dataloader)
+        val_losses.append(avg_val_loss)
+        print("Epoch {} - avg_train_loss={:.6f} - avg_val_loss={:.6f}\n".format(epoch, avg_train_loss,  avg_val_loss))
+
+        if min_valid_loss > avg_val_loss:
+            print("Val loss decreased ({:.6f}->{:.6f})\t Saving the model\n".format(min_valid_loss, avg_val_loss))
+            min_valid_loss = avg_val_loss
+            torch.save(nn_model.state_dict(), CFG.model_name)
+
+
+def get_test_acc(test_loader, nn_model):
+    correct = 0
+    nn_model.eval()
+
+    with torch.no_grad():
+        for batch_data in test_loader:
+            img0, img1, label = batch_data
+            img0, img1, label = img0.to('cpu'), img1.to('cpu'), label.to('cpu')
+
+            output1, output2 = nn_model(img0, img1)
+            euclidean_distance = F.pairwise_distance(output1, output2)
+
+            is_label_orig = False
+            if label.item() == 0:
+                is_label_orig = True
+
+            is_predict_orig = False
+            if euclidean_distance < CFG.threshold:
+                is_predict_orig = True
+
+            if is_label_orig == is_predict_orig:
+                correct += 1
+
+    test_acc = 100. * correct / len(test_loader)
+    return test_acc
+
+
+def main():
     seed_torch(seed=CFG.seed)
     train_dataset = SignatureDataset(train, CFG.canvas_size, dim=(256, 256))
     train_loader = DataLoader(train_dataset,
                               batch_size=CFG.batch_size,
                               shuffle=True,
                               num_workers=CFG.num_workers, pin_memory=True, drop_last=True)
+
+    val_dataset = SignatureDataset(test, CFG.canvas_size, dim=(256, 256))
+    val_loader = DataLoader(val_dataset,
+                            batch_size=CFG.batch_size,
+                            shuffle=True,
+                            num_workers=CFG.num_workers, pin_memory=True, drop_last=True)
 
     model = SiameseModel().to(device)
 
@@ -587,52 +708,90 @@ def main():
 
     best_loss = np.inf
 
+    train_losses = []
+    val_losses = []
+
+    train_accs = []
+    val_accs = []
+
     for epoch in range(CFG.epochs):
         start_time = time.time()
 
-        avg_loss = train_fn(train, train_loader, model, contrastive, optimizer, epoch)
+        avg_train_loss = train_fn(train_loader, model, contrastive, optimizer, epoch)
+        avg_val_loss = val_fn(val_loader, model, contrastive, epoch)
+
         elapsed = time.time() - start_time
 
-        print(f'Epoch {epoch + 1} - avg_train_loss: {avg_loss:.4f}  time: {elapsed:.0f}s')
+        train_losses.append(avg_train_loss)
+        val_losses.append(avg_val_loss)
 
-        if avg_loss < best_loss:
-            best_loss = avg_loss
+        print(f'Epoch {epoch + 1} - avg_train_loss: {avg_train_loss:.4f} - avg_val_loss: {avg_val_loss:.4f} time: {elapsed:.0f}s')
+
+        if avg_train_loss < best_loss:
+            best_loss = avg_train_loss
             print(f'Epoch {epoch + 1} - Save Best Loss: {best_loss:.4f} Model')
-            torch.save({'model': model.state_dict()}, OUTPUT_DIR + f'{CFG.model_name}_best_loss.pt')
+            torch.save({'model': model.state_dict()}, OUTPUT_DIR + f'{CFG.model_name}')
 
-        # Inference
         seed_torch(seed=CFG.seed)
         model = SiameseModel().to(device)
         if torch.cuda.is_available():
-            model.load_state_dict(torch.load(f'{CFG.model_name}_best_loss.pt')['model'])
+            model.load_state_dict(torch.load(f'{CFG.model_name}')['model'])
         else:
-            model.load_state_dict(torch.load(f'{CFG.model_name}_best_loss.pt', map_location=torch.device('cpu'))['model'])
+            model.load_state_dict(torch.load(f'{CFG.model_name}', map_location=torch.device('cpu'))['model'])
 
-        test_dataset = SignatureDataset(test, CFG.canvas_size, dim=(256, 256))
-        test_loader = DataLoader(test_dataset,
+        train_loader = DataLoader(train_dataset,
+                                  batch_size=1,
+                                  shuffle=True,
+                                  num_workers=CFG.num_workers, pin_memory=True, drop_last=True)
+
+        test_loader = DataLoader(val_dataset,
                                  batch_size=1,
                                  shuffle=True,
                                  num_workers=CFG.num_workers, pin_memory=True, drop_last=True)
 
-        counter = 0
-        label_dict = {1.0: 'Forged', 0.0: 'Original'}
-        model.eval()
-        for i, data in enumerate(test_loader, 0):
-            img1, img2, label = data
-            concatenated = torch.cat((img1, img2), 0)
+        train_acc = get_test_acc(train_loader)
+        val_acc = get_test_acc(test_loader)
+        train_accs.append(train_acc)
+        val_accs.append(val_acc)
+        print(f'Epoch {epoch + 1} - train_acc: {train_acc:.4f} - val_acc: {val_acc:.4f}')
 
-            with torch.no_grad():
-                op1, op2, confidence = model(img1.to('cpu'), img2.to('cpu'))
-            confidence = confidence.sigmoid().detach().to('cpu')
-            if label == 0.0:
-                confidence = 1 - confidence
-            cos_sim = F.cosine_similarity(op1, op2)
+        # counter = 0
+        # label_dict = {1.0: 'Forged', 0.0: 'Original'}
+        # model.eval()
+        # for i, data in enumerate(test_loader, 0):
+        #     img1, img2, label = data
+        #     concatenated = torch.cat((img1, img2), 0)
+        #
+        #     with torch.no_grad():
+        #         op1, op2, confidence = model(img1.to('cpu'), img2.to('cpu'))
+        #     confidence = confidence.sigmoid().detach().to('cpu')
+        #     if label == 0.0:
+        #         confidence = 1 - confidence
+        #     cos_sim = F.cosine_similarity(op1, op2)
+        #
+        #     imshow(torchvision.utils.make_grid(concatenated.unsqueeze(1)),
+        #            f'similarity: {cos_sim.item():.2f} Confidence: {confidence.item():.2f} Label: {label_dict[label.item()]}')
+        #     counter += 1
+        #     if counter == 40:
+        #         break
 
-            imshow(torchvision.utils.make_grid(concatenated.unsqueeze(1)),
-                   f'similarity: {cos_sim.item():.2f} Confidence: {confidence.item():.2f} Label: {label_dict[label.item()]}')
-            counter += 1
-            if counter == 40:
-                break
+    plt.plot(train_losses, '-o')
+    plt.plot(val_losses, '-o')
+    plt.xlabel('epoch')
+    plt.ylabel('losses')
+    plt.legend(['Train', 'Valid'])
+    plt.title('Train vs Valid Losses')
+    plt.grid()
+    plt.show()
+
+    plt.plot(train_accs, '-o')
+    plt.plot(val_accs, '-o')
+    plt.xlabel('epoch')
+    plt.ylabel('accuracy')
+    plt.legend(['Train', 'Valid'])
+    plt.title('Train vs Valid Accuracy')
+    plt.grid()
+    plt.show()
 
 
 if __name__ == '__main__':
