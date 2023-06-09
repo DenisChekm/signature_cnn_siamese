@@ -53,7 +53,7 @@ class CFG:
     print_freq = 50 # 100
     size = 128
     num_workers = 4
-    epochs = 5 # 10
+    epochs = 10
     batch_size = 32
     lr = 1e-3
     weight_decay = 1e-3
@@ -703,6 +703,12 @@ def main():
 
     model = SiameseModel().to(device)
 
+    # delete
+    if torch.cuda.is_available():
+        model.load_state_dict(torch.load('./model_delta_5.pt')['model'])
+    else:
+        model.load_state_dict(torch.load('./model_delta_5.pt', map_location=torch.device('cpu'))['model'])
+
     optimizer = Adam(model.parameters(), lr=CFG.lr, weight_decay=CFG.weight_decay)
     contrastive = ContrastiveLoss()
 
@@ -715,7 +721,7 @@ def main():
 
     for epoch in range(CFG.epochs):
         start_time = time.time()
-
+        epoch = epoch + 6   # delete
         avg_train_loss = train_fn(train_loader, model, contrastive, optimizer, epoch)
         avg_val_loss = val_fn(val_loader, model, contrastive, epoch)
 
