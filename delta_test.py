@@ -50,7 +50,7 @@ if not os.path.exists(OUTPUT_DIR):
 class CFG:
     apex = False
     debug = False
-    print_freq = 50
+    print_freq = 100
     size = 128
     num_workers = 4
     epochs = 10
@@ -749,8 +749,8 @@ def main():
                                  shuffle=True,
                                  num_workers=CFG.num_workers, pin_memory=True, drop_last=True)
 
-        train_acc = get_test_acc(train_loader)
-        val_acc = get_test_acc(test_loader)
+        train_acc = get_test_acc(train_loader, model)
+        val_acc = get_test_acc(test_loader, model)
         train_accs.append(train_acc)
         val_accs.append(val_acc)
         print(f'Epoch {epoch + 1} - train_acc: {train_acc:.4f} - val_acc: {val_acc:.4f}')
