@@ -50,10 +50,10 @@ if not os.path.exists(OUTPUT_DIR):
 class CFG:
     apex = False
     debug = False
-    print_freq = 100
+    print_freq = 50 # 100
     size = 128
     num_workers = 4
-    epochs = 10
+    epochs = 5 # 10
     batch_size = 32
     lr = 1e-3
     weight_decay = 1e-3
@@ -61,7 +61,7 @@ class CFG:
     gradient_accumulation_steps = 1
     max_grad_norm = 1000
     target_size = train["label"].shape[0]
-    threshold = 0.41
+    threshold = 0.69
     trn_folds = [0]
     model_name = 'delta_test.pt'  # 'vit_base_patch32_224_in21k' 'tf_efficientnetv2_b0' 'resnext50_32x4d' 'tresnet_m'
     train = True
@@ -545,7 +545,7 @@ def train_fn(train_loader, model, criterion, optimizer, epoch):
             print(f'Epoch: [{epoch}][{step}/{len(train_loader)}] ', end='')
             print(f'Elapsed: {time_since(start, float(step + 1) / len(train_loader))} ', end='')
             print(f'Loss: {losses.val:.4f}({losses.avg:.4f}) ', end='')
-            print(f'Grad: {grad_norm:.4f} ')
+            print(f'Grad: {grad_norm:.4f}')
 
     return losses.avg
 
@@ -577,7 +577,7 @@ def val_fn(val_loader, model, criterion, epoch):
             if step % CFG.print_freq == 0 or step == (len(val_loader) - 1):
                 print(f'Epoch: [{epoch}][{step}/{len(val_loader)}] ', end='')
                 print(f'Elapsed: {time_since(start, float(step + 1) / len(val_loader))} ', end='')
-                print(f'Loss: {losses.val:.4f}({losses.avg:.4f} ')
+                print(f'Loss: {losses.val:.4f}({losses.avg:.4f})')
 
     return losses.avg
 
@@ -660,30 +660,30 @@ def train_valid(train_dataloader, val_dataloader):
             torch.save(nn_model.state_dict(), CFG.model_name)
 
 
-def get_test_acc(test_loader, nn_model):
+def get_test_acc(data_loader, nn_model):
     correct = 0
     nn_model.eval()
 
     with torch.no_grad():
-        for batch_data in test_loader:
+        for batch_data in data_loader:
             img0, img1, label = batch_data
             img0, img1, label = img0.to('cpu'), img1.to('cpu'), label.to('cpu')
 
-            output1, output2 = nn_model(img0, img1)
-            euclidean_distance = F.pairwise_distance(output1, output2)
+            output1, output2, preds = nn_model(img0, img1)
+            cos_sim = F.cosine_similarity(output1, output2)
 
             is_label_orig = False
             if label.item() == 0:
                 is_label_orig = True
 
             is_predict_orig = False
-            if euclidean_distance < CFG.threshold:
+            if cos_sim > CFG.threshold:
                 is_predict_orig = True
 
             if is_label_orig == is_predict_orig:
                 correct += 1
 
-    test_acc = 100. * correct / len(test_loader)
+    test_acc = 100. * correct / len(data_loader)
     return test_acc
 
 
@@ -710,9 +710,8 @@ def main():
 
     train_losses = []
     val_losses = []
-
-    train_accs = []
-    val_accs = []
+    # train_accs = []
+    # val_accs = []
 
     for epoch in range(CFG.epochs):
         start_time = time.time()
@@ -726,34 +725,42 @@ def main():
         val_losses.append(avg_val_loss)
 
         print(f'Epoch {epoch + 1} - avg_train_loss: {avg_train_loss:.4f} - avg_val_loss: {avg_val_loss:.4f} time: {elapsed:.0f}s')
+        torch.save({'model': model.state_dict()}, OUTPUT_DIR + f'model_delta_{epoch}.pt')
 
         if avg_train_loss < best_loss:
             best_loss = avg_train_loss
             print(f'Epoch {epoch + 1} - Save Best Loss: {best_loss:.4f} Model')
             torch.save({'model': model.state_dict()}, OUTPUT_DIR + f'{CFG.model_name}')
 
-        seed_torch(seed=CFG.seed)
-        model = SiameseModel().to(device)
-        if torch.cuda.is_available():
-            model.load_state_dict(torch.load(f'{CFG.model_name}')['model'])
-        else:
-            model.load_state_dict(torch.load(f'{CFG.model_name}', map_location=torch.device('cpu'))['model'])
+        # seed_torch(seed=CFG.seed)
+        # model = SiameseModel().to(device)
+        # if torch.cuda.is_available():
+        #     model.load_state_dict(torch.load(f'{CFG.model_name}')['model'])
+        # else:
+        #     model.load_state_dict(torch.load(f'{CFG.model_name}', map_location=torch.device('cpu'))['model'])
+        #
+        # train_loader = DataLoader(train_dataset,
+        #                           batch_size=1,
+        #                           shuffle=True,
+        #                           num_workers=CFG.num_workers, pin_memory=True, drop_last=True)
+        #
+        # test_loader = DataLoader(val_dataset,
+        #                          batch_size=1,
+        #                          shuffle=True,
+        #                          num_workers=CFG.num_workers, pin_memory=True, drop_last=True)
 
-        train_loader = DataLoader(train_dataset,
-                                  batch_size=1,
-                                  shuffle=True,
-                                  num_workers=CFG.num_workers, pin_memory=True, drop_last=True)
-
-        test_loader = DataLoader(val_dataset,
-                                 batch_size=1,
-                                 shuffle=True,
-                                 num_workers=CFG.num_workers, pin_memory=True, drop_last=True)
-
-        train_acc = get_test_acc(train_loader, model)
-        val_acc = get_test_acc(test_loader, model)
-        train_accs.append(train_acc)
-        val_accs.append(val_acc)
-        print(f'Epoch {epoch + 1} - train_acc: {train_acc:.4f} - val_acc: {val_acc:.4f}')
+        # start_time = time.time()
+        # train_acc = get_test_acc(train_loader, model)
+        # elapsed = time.time() - start_time
+        # print(f'train acc elapsed {elapsed}s')
+        #
+        # start_time = time.time()
+        # val_acc = get_test_acc(test_loader, model)
+        # elapsed = time.time() - start_time
+        # print(f'val acc elapsed {elapsed}s')
+        # train_accs.append(train_acc)
+        # val_accs.append(val_acc)
+        # print(f'Epoch {epoch + 1} - train_acc: {train_acc:.4f} - val_acc: {val_acc:.4f}')
 
         # counter = 0
         # label_dict = {1.0: 'Forged', 0.0: 'Original'}
@@ -784,14 +791,14 @@ def main():
     plt.grid()
     plt.show()
 
-    plt.plot(train_accs, '-o')
-    plt.plot(val_accs, '-o')
-    plt.xlabel('epoch')
-    plt.ylabel('accuracy')
-    plt.legend(['Train', 'Valid'])
-    plt.title('Train vs Valid Accuracy')
-    plt.grid()
-    plt.show()
+    # plt.plot(train_accs, '-o')
+    # plt.plot(val_accs, '-o')
+    # plt.xlabel('epoch')
+    # plt.ylabel('accuracy')
+    # plt.legend(['Train', 'Valid'])
+    # plt.title('Train vs Valid Accuracy')
+    # plt.grid()
+    # plt.show()
 
 
 if __name__ == '__main__':
