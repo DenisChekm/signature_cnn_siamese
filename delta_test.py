@@ -53,7 +53,7 @@ class CFG:
     print_freq = 50 # 100
     size = 128
     num_workers = 4
-    epochs = 10
+    epochs = 20
     batch_size = 32
     lr = 1e-3
     weight_decay = 1e-3
@@ -695,19 +695,13 @@ def main():
                               shuffle=True,
                               num_workers=CFG.num_workers, pin_memory=True, drop_last=True)
 
-    val_dataset = SignatureDataset(test, CFG.canvas_size, dim=(256, 256))
-    val_loader = DataLoader(val_dataset,
-                            batch_size=CFG.batch_size,
-                            shuffle=True,
-                            num_workers=CFG.num_workers, pin_memory=True, drop_last=True)
+    # val_dataset = SignatureDataset(test, CFG.canvas_size, dim=(256, 256))
+    # val_loader = DataLoader(val_dataset,
+    #                         batch_size=CFG.batch_size,
+    #                         shuffle=True,
+    #                         num_workers=CFG.num_workers, pin_memory=True, drop_last=True)
 
     model = SiameseModel().to(device)
-
-    # delete
-    if torch.cuda.is_available():
-        model.load_state_dict(torch.load('./model_delta_5.pt')['model'])
-    else:
-        model.load_state_dict(torch.load('./model_delta_5.pt', map_location=torch.device('cpu'))['model'])
 
     optimizer = Adam(model.parameters(), lr=CFG.lr, weight_decay=CFG.weight_decay)
     contrastive = ContrastiveLoss()
@@ -715,28 +709,30 @@ def main():
     best_loss = np.inf
 
     train_losses = []
-    val_losses = []
+    # val_losses = []
     # train_accs = []
     # val_accs = []
 
     for epoch in range(CFG.epochs):
         start_time = time.time()
-        epoch = epoch + 6   # delete
+
         avg_train_loss = train_fn(train_loader, model, contrastive, optimizer, epoch)
-        avg_val_loss = val_fn(val_loader, model, contrastive, epoch)
+        # avg_val_loss = val_fn(val_loader, model, contrastive, epoch)
 
         elapsed = time.time() - start_time
 
         train_losses.append(avg_train_loss)
-        val_losses.append(avg_val_loss)
 
-        print(f'Epoch {epoch + 1} - avg_train_loss: {avg_train_loss:.4f} - avg_val_loss: {avg_val_loss:.4f} time: {elapsed:.0f}s')
+        # val_losses.append(avg_val_loss)
+
+        # print(f'Epoch {epoch + 1} - avg_train_loss: {avg_train_loss:.4f} - avg_val_loss: {avg_val_loss:.4f} time: {elapsed:.0f}s')
+        print(f'Epoch {epoch + 1} - avg_train_loss: {avg_train_loss:.4f} time: {elapsed:.0f}s')
         torch.save({'model': model.state_dict()}, OUTPUT_DIR + f'model_delta_{epoch}.pt')
 
         if avg_train_loss < best_loss:
             best_loss = avg_train_loss
             print(f'Epoch {epoch + 1} - Save Best Loss: {best_loss:.4f} Model')
-            torch.save({'model': model.state_dict()}, OUTPUT_DIR + f'{CFG.model_name}')
+            torch.save({'model': model.state_dict()}, OUTPUT_DIR + 'best_loss.pt')
 
         # seed_torch(seed=CFG.seed)
         # model = SiameseModel().to(device)
@@ -789,22 +785,15 @@ def main():
         #         break
 
     plt.plot(train_losses, '-o')
-    plt.plot(val_losses, '-o')
+    # plt.plot(val_losses, '-o')
     plt.xlabel('epoch')
     plt.ylabel('losses')
-    plt.legend(['Train', 'Valid'])
-    plt.title('Train vs Valid Losses')
+    plt.legend(['Train'])
+    plt.title('Train Losses')
+    # plt.legend(['Train', 'Valid'])
+    # plt.title('Train vs Valid Losses')
     plt.grid()
     plt.show()
-
-    # plt.plot(train_accs, '-o')
-    # plt.plot(val_accs, '-o')
-    # plt.xlabel('epoch')
-    # plt.ylabel('accuracy')
-    # plt.legend(['Train', 'Valid'])
-    # plt.title('Train vs Valid Accuracy')
-    # plt.grid()
-    # plt.show()
 
 
 if __name__ == '__main__':
