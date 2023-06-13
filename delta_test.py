@@ -488,12 +488,14 @@ class AverageMeter(object):
         self.avg = 0
         self.sum = 0
         self.count = 0
+        self.list = []
 
     def update(self, val, n=1):
         self.val = val
         self.sum += val * n
         self.count += n
         self.avg = self.sum / self.count
+        self.list.append(val * n)
 
 
 def as_minutes(s):
@@ -547,39 +549,7 @@ def train_fn(train_loader, model, criterion, optimizer, epoch):
             print(f'Loss: {losses.val:.4f}({losses.avg:.4f}) ', end='')
             print(f'Grad: {grad_norm:.4f}')
 
-    return losses.avg
-
-
-def val_fn(val_loader, model, criterion, epoch):
-    data_time = AverageMeter()
-    losses = AverageMeter()
-    # switch to train mode
-    model.eval()
-    start = end = time.time()
-    global_step = 0
-    with torch.no_grad():
-        for step, (img1, img2, labels) in enumerate(val_loader):
-            # measure data loading time
-            data_time.update(time.time() - end)
-            img1 = img1.to(device).float()
-            img2 = img2.to(device).float()
-            labels = labels.to(device)
-
-            batch_size = labels.size(0)
-            out1, out2, preds = model(img1, img2)
-            loss = criterion(out1, out2, labels)
-
-            # record loss
-            losses.update(loss.item(), batch_size)
-
-            # measure elapsed time
-            end = time.time()
-            if step % CFG.print_freq == 0 or step == (len(val_loader) - 1):
-                print(f'Epoch: [{epoch}][{step}/{len(val_loader)}] ', end='')
-                print(f'Elapsed: {time_since(start, float(step + 1) / len(val_loader))} ', end='')
-                print(f'Loss: {losses.val:.4f}({losses.avg:.4f})')
-
-    return losses.avg
+    return losses.avg, losses.list
 
 
 def imshow(img, text=None, save=False):
@@ -597,94 +567,6 @@ def imshow(img, text=None, save=False):
 def show_plot(iteration, loss):
     plt.plot(iteration, loss)
     plt.show()
-
-
-def train_valid(train_dataloader, val_dataloader):
-    nn_model = SiameseModel().to(device)
-    criterion = ContrastiveLoss()
-    # optimizer = RMSprop(nn_model.parameters(), lr=1e-4, alpha=0.99)
-    optimizer = Adam(nn_model.parameters(), lr=CFG.lr, weight_decay=CFG.weight_decay)
-
-    train_losses = []
-    val_losses = []
-
-    num_train_batches = len(train_dataloader) - 1
-    min_valid_loss = np.inf
-
-    for epoch in range(1, CFG.epochs + 1):
-
-        train_loss = 0.0
-        nn_model.train()
-        for batch_i, batch_data in enumerate(train_dataloader):
-            img0, img1, labels = batch_data
-            img0, img1, labels = img0.to(device), img1.to(device), labels.to(device)
-
-            optimizer.zero_grad()
-            output1, output2 = nn_model(img0, img1)
-
-            loss = criterion(output1, output2, labels)
-            loss.backward()
-            optimizer.step()
-
-            train_loss += loss.item()
-
-            if batch_i % CFG.print_freq == 0:
-                print("Epoch: [{}] [{}/{}] Loss {:.6f}"
-                      .format(epoch, batch_i, num_train_batches, loss.item()))
-            elif batch_i == num_train_batches:
-                print("Epoch: [{}] [{}/{}] Loss {:.6f}"
-                      .format(epoch, batch_i, num_train_batches, loss.item()))
-
-        avg_train_loss = train_loss / len(train_dataloader)
-        train_losses.append(avg_train_loss)
-
-        val_loss = 0.0
-        nn_model.eval()
-        with torch.no_grad():
-            for batch_data in val_dataloader:
-                img0, img1, labels = batch_data
-                img0, img1, labels = img0.to(device), img1.to(device), labels.to(device)
-
-                output1, output2 = nn_model(img0, img1)
-                loss = criterion(output1, output2, labels)
-
-                val_loss += loss.item()
-
-        avg_val_loss = val_loss / len(val_dataloader)
-        val_losses.append(avg_val_loss)
-        print("Epoch {} - avg_train_loss={:.6f} - avg_val_loss={:.6f}\n".format(epoch, avg_train_loss,  avg_val_loss))
-
-        if min_valid_loss > avg_val_loss:
-            print("Val loss decreased ({:.6f}->{:.6f})\t Saving the model\n".format(min_valid_loss, avg_val_loss))
-            min_valid_loss = avg_val_loss
-            torch.save(nn_model.state_dict(), CFG.model_name)
-
-
-def get_test_acc(data_loader, nn_model):
-    correct = 0
-    nn_model.eval()
-
-    with torch.no_grad():
-        for batch_data in data_loader:
-            img0, img1, label = batch_data
-            img0, img1, label = img0.to('cpu'), img1.to('cpu'), label.to('cpu')
-
-            output1, output2, preds = nn_model(img0, img1)
-            cos_sim = F.cosine_similarity(output1, output2)
-
-            is_label_orig = False
-            if label.item() == 0:
-                is_label_orig = True
-
-            is_predict_orig = False
-            if cos_sim > CFG.threshold:
-                is_predict_orig = True
-
-            if is_label_orig == is_predict_orig:
-                correct += 1
-
-    test_acc = 100. * correct / len(data_loader)
-    return test_acc
 
 
 def main():
@@ -708,25 +590,19 @@ def main():
 
     best_loss = np.inf
 
-    train_losses = []
-    # val_losses = []
-    # train_accs = []
-    # val_accs = []
+    std_losses = []
 
     for epoch in range(CFG.epochs):
         start_time = time.time()
 
-        avg_train_loss = train_fn(train_loader, model, contrastive, optimizer, epoch)
-        # avg_val_loss = val_fn(val_loader, model, contrastive, epoch)
+        avg_train_loss, losses_list = train_fn(train_loader, model, contrastive, optimizer, epoch)
 
         elapsed = time.time() - start_time
 
-        train_losses.append(avg_train_loss)
+        std = np.std(losses_list)
+        std_losses.append(std)
 
-        # val_losses.append(avg_val_loss)
-
-        # print(f'Epoch {epoch + 1} - avg_train_loss: {avg_train_loss:.4f} - avg_val_loss: {avg_val_loss:.4f} time: {elapsed:.0f}s')
-        print(f'Epoch {epoch + 1} - avg_train_loss: {avg_train_loss:.4f} time: {elapsed:.0f}s')
+        print(f'Epoch {epoch} - avg_train_loss: {avg_train_loss:.4f} - std_loss: {std:.4f} time: {elapsed:.0f}s')
         torch.save({'model': model.state_dict()}, OUTPUT_DIR + f'model_delta_{epoch}.pt')
 
         if avg_train_loss < best_loss:
@@ -784,16 +660,12 @@ def main():
         #     if counter == 40:
         #         break
 
-    plt.plot(train_losses, '-o')
-    # plt.plot(val_losses, '-o')
-    plt.xlabel('epoch')
-    plt.ylabel('losses')
-    plt.legend(['Train'])
-    plt.title('Train Losses')
-    # plt.legend(['Train', 'Valid'])
-    # plt.title('Train vs Valid Losses')
-    plt.grid()
-    plt.show()
+    # plt.plot(std_losses, '-o')
+    # plt.xlabel('эпоха')
+    # plt.ylabel('с.к.о.')
+    # plt.legend(['Std'])
+    # plt.grid()
+    # plt.show()
 
 
 if __name__ == '__main__':
