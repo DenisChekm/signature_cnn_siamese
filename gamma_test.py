@@ -14,7 +14,7 @@ import torch.nn.functional as F
 from torch.optim import Adam
 from torch.utils.data import DataLoader, Dataset
 
-from skimage import img_as_ubyte
+from skimage.util import img_as_ubyte
 from skimage import filters, transform
 from skimage.io import imread
 
