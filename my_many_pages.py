@@ -6,7 +6,7 @@ from tkinter.messagebox import showinfo, showerror
 import cv2
 from PIL import Image, ImageTk
 
-from siamese_model import SiameseModel
+from model.siamese_model import SiameseModel
 
 
 class Application(tk.Tk):

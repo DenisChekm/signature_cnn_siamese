@@ -179,7 +179,7 @@ class PreprocessImage:
         img_size : tuple (H x W)
             The size that will be used to resize (rescale) the signature
         input_size : tuple (H x W)
-            The final size of the signature, obtained by croping the center of image.
+            The final size of the signature, obtained by cropping the center of image.
             This is necessary in cases where data-augmentation is used, and the input
             to the neural network needs to have a slightly smaller size.
         Returns

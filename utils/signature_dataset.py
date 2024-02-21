@@ -1,7 +1,7 @@
 import torch
 from torch.utils.data import Dataset
 
-from preprocess_image import PreprocessImage
+from utils.preprocess_image import PreprocessImage
 
 
 class SignatureDataset(Dataset):
@@ -18,7 +18,6 @@ class SignatureDataset(Dataset):
         return len(self.df)
 
     def __getitem__(self, index):
-        # getting the image path
         real_file_path = self.real_file_names[index]
         forged_file_path = self.forged_file_names[index]
 
