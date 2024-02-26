@@ -210,7 +210,7 @@ class TrainFrame(tk.Frame):
 
 if __name__ == "__main__":
     app = Application()
-    icon = tk.PhotoImage(file="images/signature-icon-50.png")
+    icon = tk.PhotoImage(file="../images/signature-icon-50.png")
     app.iconphoto(False, icon)
     app.title("Проверка подлинности подписи")
     app.resizable(False, False)
