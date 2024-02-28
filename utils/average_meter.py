@@ -1,5 +1,5 @@
-import math
-import time
+from math import floor
+from time import time
 
 
 class AverageMeter(object):
@@ -21,14 +21,14 @@ class AverageMeter(object):
 
 
 def as_minutes(s):
-    m = math.floor(s / 60)
+    m = floor(s / 60)
     s -= m * 60
     return '%dm %ds' % (m, s)
 
 
-def time_since(since, percent):
-    now = time.time()
-    s = now - since
-    es = s / percent
-    rs = es - s
-    return '%s (remain %s)' % (as_minutes(s), as_minutes(rs))
+def time_since(start, percent):
+    now = time()
+    since = now - start
+    es = since / percent
+    remain = es - since
+    return '%s (remain %s)' % (as_minutes(since), as_minutes(remain))
