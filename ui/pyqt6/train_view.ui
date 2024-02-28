@@ -17,9 +17,9 @@
    <property name="geometry">
     <rect>
      <x>10</x>
-     <y>370</y>
+     <y>220</y>
      <width>311</width>
-     <height>61</height>
+     <height>81</height>
     </rect>
    </property>
    <property name="readOnly">
@@ -33,8 +33,8 @@
    <property name="geometry">
     <rect>
      <x>10</x>
-     <y>200</y>
-     <width>111</width>
+     <y>160</y>
+     <width>131</width>
      <height>24</height>
     </rect>
    </property>
@@ -43,6 +43,9 @@
    </property>
   </widget>
   <widget class="QGroupBox" name="group_box_train_params">
+   <property name="enabled">
+    <bool>true</bool>
+   </property>
    <property name="geometry">
     <rect>
      <x>10</x>
@@ -183,7 +186,7 @@
    <property name="geometry">
     <rect>
      <x>10</x>
-     <y>350</y>
+     <y>200</y>
      <width>111</width>
      <height>16</height>
     </rect>
@@ -196,42 +199,13 @@
    <property name="geometry">
     <rect>
      <x>160</x>
-     <y>200</y>
+     <y>160</y>
      <width>161</width>
      <height>24</height>
     </rect>
    </property>
    <property name="text">
     <string>Проверить обученную сеть</string>
-   </property>
-  </widget>
-  <widget class="QPlainTextEdit" name="plain_text_edit_log_2">
-   <property name="geometry">
-    <rect>
-     <x>10</x>
-     <y>260</y>
-     <width>311</width>
-     <height>61</height>
-    </rect>
-   </property>
-   <property name="readOnly">
-    <bool>true</bool>
-   </property>
-   <property name="plainText">
-    <string/>
-   </property>
-  </widget>
-  <widget class="QLabel" name="label_epochs_count_3">
-   <property name="geometry">
-    <rect>
-     <x>10</x>
-     <y>240</y>
-     <width>111</width>
-     <height>16</height>
-    </rect>
-   </property>
-   <property name="text">
-    <string>Прогресс обучения</string>
    </property>
   </widget>
  </widget>

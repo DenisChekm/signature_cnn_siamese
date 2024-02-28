@@ -18,9 +18,8 @@ from utils.signature_dataset import SignatureDataset
 from sklearn.metrics import accuracy_score, classification_report, confusion_matrix, RocCurveDisplay, \
     ConfusionMatrixDisplay
 
-DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 # label_dict = {1.0: 'Forged', 0.0: 'Original'}
-
+DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 OUTPUT_DIR = "C:/Users/denle/PycharmProjects/signature_cnn_siamese/savedmodels/"
 if not os.path.exists(OUTPUT_DIR):
     os.makedirs(OUTPUT_DIR)
@@ -60,9 +59,9 @@ def linear_block(in_features, out_features):
     )
 
 
-def output_block(in_features, out_features):
+def output_block(in_features):
     return Sequential(
-        Linear(in_features, out_features),
+        Linear(in_features, 1),
         Sigmoid()
     )
 
@@ -102,13 +101,12 @@ class SignatureNet(Module):
         self.adap_avg_pool = AdaptiveAvgPool2d(3)
 
         self.fc = Sequential(
-            linear_block(256 * 3 * 3, 1024),
+            linear_block(256 * 3 * 3, 512),
             Dropout(p=0.4),
-            linear_block(1024, 512),
             linear_block(512, 256)
         )
 
-        self.classifier = output_block(256 * 2, 1)
+        self.classifier = output_block(256 * 2)
 
     def __forward_once(self, img):
         x = self.adap_avg_pool(self.conv(img))
@@ -122,8 +120,8 @@ class SignatureNet(Module):
         return self.classifier(torch.cat([embedding1, embedding2], dim=1))
 
     @staticmethod
-    def __test_by_model(model, data_loader, loss_fn):
-        test_loss, tp, tn, fp, fn = 0, 0, 0, 0, 0
+    def __test_by_model(model, data_loader):
+        tp, tn, fp, fn = 0, 0, 0, 0
 
         model.eval()
         with torch.no_grad():
@@ -133,21 +131,13 @@ class SignatureNet(Module):
                 labels = labels.to(DEVICE)
 
                 prediction = model(img1, img2).squeeze()
-
-                test_loss += loss_fn(prediction, labels).item()
-                # acc += (torch.round(prediction) == labels).sum().item()
-
                 tp_tn_fp_fn_batch = tp_tn_fp_fn(labels, torch.round(prediction))
                 tp += tp_tn_fp_fn_batch['tp']
                 tn += tp_tn_fp_fn_batch['tn']
                 fp += tp_tn_fp_fn_batch['fp']
                 fn += tp_tn_fp_fn_batch['fn']
 
-        test_loss /= len(data_loader.dataset)
-        # acc /= len(test_loader.dataset)
-
-        # result = {'loss': test_loss, 'acc': acc, 'acc_l': acc_lecture, 'p': precision_value, 'recall': recall_value}
-        result = {'loss': test_loss}
+        result = {'tp': tp, 'tn': tn, 'fp': fp, 'fn': fn}
         return result
 
     @staticmethod
@@ -226,6 +216,8 @@ def test_best_model(batch_size: int, num_workers: int, loss_fn):
     start_time = time()
     trues, predictions, test_loss = _make_predictions(model, test_loader, loss_fn)
     report = classification_report(trues, predictions)
+    # In the binary case, we can extract true positives, etc. as follows:
+    # tn, fp, fn, tp = confusion_matrix([0, 1, 0, 1], [1, 1, 1, 0]).ravel()
     matrix = confusion_matrix(trues, predictions)
     elapsed_time = time() - start_time
     print(f'Test [avg_loss {test_loss:.6f}] - time: {elapsed_time:.0f}s')
@@ -235,7 +227,8 @@ def test_best_model(batch_size: int, num_workers: int, loss_fn):
 
 
 def fit(batch_size: int, epochs_number: int):
-    num_workers = 4  # cpu_count(logical=False) - 1  # 4 - 1 = 3
+    # мб проверить сколько процессов занято и часть незанятых подлкючить
+    num_workers = cpu_count(logical=False) - 1  # 4 - 1 = 3
     seed_torch(seed=Config.SEED)
 
     train_dataset = SignatureDataset("train", Config.CANVAS_SIZE, dim=(256, 256))
@@ -254,7 +247,8 @@ def fit(batch_size: int, epochs_number: int):
     optim = Adamax(model.parameters())
 
     best_loss = np.inf
-    std_losses = []
+    std_train_losses, std_val_losses, = [], []
+    avg_train_losses, avg_val_losses, = [], []
     early_stop_epoch_count = 0
 
     for epoch in range(epochs_number):
@@ -262,11 +256,12 @@ def fit(batch_size: int, epochs_number: int):
         avg_train_loss, losses_list = _train_loop(train_loader, model, loss_function, optim, epoch)
         elapsed = time() - start_time
 
+        avg_train_losses.append(avg_train_loss)
         std = np.std(losses_list)
-        std_losses.append(std)
+        std_train_losses.append(std)
 
         val_loss, acc, val_time = _validation_loop(model, validation_loader, loss_function)
-
+        avg_val_losses.append(val_loss)
         print(f'Epoch {epoch} - Train [avg_loss: {avg_train_loss:.4f} - std_loss: {std:.4f} time: {elapsed:.0f}s]; '
               f'Val [avg_loss {val_loss:.6f}, acc {acc:.6f}, time: {val_time:.0f}s]')
 
@@ -284,4 +279,4 @@ def fit(batch_size: int, epochs_number: int):
                 break
 
     report, matrix = test_best_model(batch_size, num_workers, loss_function)
-    return std_losses, report, matrix
+    return avg_train_losses, avg_val_losses, report, matrix
