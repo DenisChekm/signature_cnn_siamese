@@ -31,7 +31,6 @@ BEST_MODEL = OUTPUT_DIR + 'best_loss.pt'
 class Config:
     SEED = 42
     EARLY_STOPPING_EPOCH = 5
-    NUM_WORKERS = 4  # cpu_count(logical=False) - 1  # 4 - 1 = 3
     PRINT_FREQ = 54  # 50
     CANVAS_SIZE = (952, 1360)
 
@@ -218,11 +217,11 @@ def _validation_loop(model, dataloader, loss_fn):
     return val_loss, acc, elapsed_time
 
 
-def test_best_model(batch_size: int, loss_fn):
+def test_best_model(batch_size: int, num_workers: int, loss_fn):
     model = SignatureNet.load_best_model()
     test_dataset = SignatureDataset("test", Config.CANVAS_SIZE, dim=(256, 256))
     test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=True,
-                             num_workers=Config.NUM_WORKERS, pin_memory=True, drop_last=True)
+                             num_workers=num_workers, pin_memory=True, drop_last=True)
 
     start_time = time()
     trues, predictions, test_loss = _make_predictions(model, test_loader, loss_fn)
@@ -236,15 +235,16 @@ def test_best_model(batch_size: int, loss_fn):
 
 
 def fit(batch_size: int, epochs_number: int):
+    num_workers = 4  # cpu_count(logical=False) - 1  # 4 - 1 = 3
     seed_torch(seed=Config.SEED)
 
     train_dataset = SignatureDataset("train", Config.CANVAS_SIZE, dim=(256, 256))
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True,
-                              num_workers=Config.NUM_WORKERS, pin_memory=True, drop_last=True)
+                              num_workers=num_workers, pin_memory=True, drop_last=True)
 
     val_dataset = SignatureDataset("val", Config.CANVAS_SIZE, dim=(256, 256))
     validation_loader = DataLoader(val_dataset, batch_size=batch_size,
-                                   num_workers=Config.NUM_WORKERS, pin_memory=True, drop_last=True)
+                                   num_workers=num_workers, pin_memory=True, drop_last=True)
 
     model = SignatureNet().to(DEVICE)
     print(model)
@@ -283,5 +283,5 @@ def fit(batch_size: int, epochs_number: int):
                 print(f"Early stopping. No better loss value for last {Config.EARLY_STOPPING_EPOCH} epochs")
                 break
 
-    report, matrix = test_best_model(batch_size, loss_function)
+    report, matrix = test_best_model(batch_size, num_workers, loss_function)
     return std_losses, report, matrix
