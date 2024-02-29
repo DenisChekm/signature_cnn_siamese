@@ -6,8 +6,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>1058</width>
-    <height>440</height>
+    <width>1105</width>
+    <height>393</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -16,10 +16,10 @@
   <widget class="QPlainTextEdit" name="plain_text_edit_log">
    <property name="geometry">
     <rect>
-     <x>10</x>
-     <y>220</y>
-     <width>311</width>
-     <height>81</height>
+     <x>360</x>
+     <y>270</y>
+     <width>731</width>
+     <height>111</height>
     </rect>
    </property>
    <property name="readOnly">
@@ -34,7 +34,7 @@
     <rect>
      <x>10</x>
      <y>160</y>
-     <width>131</width>
+     <width>161</width>
      <height>24</height>
     </rect>
    </property>
@@ -48,9 +48,9 @@
    </property>
    <property name="geometry">
     <rect>
-     <x>10</x>
+     <x>8</x>
      <y>10</y>
-     <width>309</width>
+     <width>341</width>
      <height>142</height>
     </rect>
    </property>
@@ -152,10 +152,10 @@
   <widget class="QGroupBox" name="group_box_">
    <property name="geometry">
     <rect>
-     <x>330</x>
+     <x>360</x>
      <y>10</y>
-     <width>711</width>
-     <height>421</height>
+     <width>731</width>
+     <height>231</height>
     </rect>
    </property>
    <property name="title">
@@ -174,7 +174,7 @@
    <widget class="QGraphicsView" name="graphicsView_2">
     <property name="geometry">
      <rect>
-      <x>350</x>
+      <x>390</x>
       <y>20</y>
       <width>331</width>
       <height>201</height>
@@ -185,8 +185,8 @@
   <widget class="QLabel" name="label_epochs_count_2">
    <property name="geometry">
     <rect>
-     <x>10</x>
-     <y>200</y>
+     <x>360</x>
+     <y>250</y>
      <width>111</width>
      <height>16</height>
     </rect>
@@ -198,7 +198,7 @@
   <widget class="QPushButton" name="push_button_test_model">
    <property name="geometry">
     <rect>
-     <x>160</x>
+     <x>190</x>
      <y>160</y>
      <width>161</width>
      <height>24</height>

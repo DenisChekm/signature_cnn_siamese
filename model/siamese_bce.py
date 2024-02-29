@@ -3,6 +3,7 @@ import numpy as np
 import os
 import random
 from time import time
+from datetime import datetime
 from psutil import cpu_count
 
 import torch
@@ -14,11 +15,12 @@ from torch.utils.data import DataLoader
 
 from utils.average_meter import AverageMeter, time_since
 from utils.signature_dataset import SignatureDataset
+from utils.preprocess_image import PreprocessImage
 
 from sklearn.metrics import accuracy_score, classification_report, confusion_matrix, RocCurveDisplay, \
     ConfusionMatrixDisplay
 
-# label_dict = {1.0: 'Forged', 0.0: 'Original'}
+label_dict = {1.0: 'Подделанная', 0.0: 'Настоящая'}
 DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 OUTPUT_DIR = "C:/Users/denle/PycharmProjects/signature_cnn_siamese/savedmodels/"
 if not os.path.exists(OUTPUT_DIR):
@@ -109,12 +111,13 @@ class SignatureNet(Module):
         self.classifier = output_block(256 * 2)
 
     def __forward_once(self, img):
-        x = self.adap_avg_pool(self.conv(img))
+        # Inputs need to have 4 dimensions (batch x channels x height x width), and also be between [0, 1]
+        x = img.view(-1, 1, 150, 220).div(255)
+        x = self.adap_avg_pool(self.conv(x))
         x = torch.flatten(x, start_dim=1)
         return self.fc(x)
 
     def forward(self, img1, img2):
-        # Inputs need to have 4 dimensions (batch x channels x height x width), and also be between [0, 1]
         embedding1 = self.__forward_once(img1)
         embedding2 = self.__forward_once(img2)
         return self.classifier(torch.cat([embedding1, embedding2], dim=1))
@@ -158,8 +161,8 @@ def _make_predictions(model, dataloader, loss_fn):
     model.eval()
     with torch.no_grad():
         for img1, img2, label in dataloader:
-            img1 = img1.to(DEVICE).float()
-            img2 = img2.to(DEVICE).float()
+            img1 = img1.to(DEVICE)
+            img2 = img2.to(DEVICE)
             label = label.to(DEVICE)
 
             targets.append(label)
@@ -173,15 +176,15 @@ def _make_predictions(model, dataloader, loss_fn):
     return targets, predictions, loss
 
 
-def _train_loop(train_loader, model, loss_function, optimizer, epoch):
+def _train_loop(train_loader, model, loss_function, optimizer, epoch, print_fn_callback):
     losses = AverageMeter()
     batches = len(train_loader)
+    start = time()
 
     model.train()
-    start = time()
     for batch, (img1, img2, labels) in enumerate(train_loader):
-        img1 = img1.to(DEVICE).float()
-        img2 = img2.to(DEVICE).float()
+        img1 = img1.to(DEVICE)
+        img2 = img2.to(DEVICE)
         labels = labels.to(DEVICE)
 
         predictions = model(img1, img2).squeeze()
@@ -193,8 +196,9 @@ def _train_loop(train_loader, model, loss_function, optimizer, epoch):
         optimizer.zero_grad()
 
         if (batch + 1) % Config.PRINT_FREQ == 0:
-            print(f'Epoch [{epoch}][{batch + 1}/{batches}] Elapsed: {time_since(start, float(batch + 1) / batches)}'
-                  f' Loss: {losses.val:.4f}({losses.avg:.4f})')
+            print_fn_callback(
+                f'Epoch [{epoch}][{batch + 1}/{batches}] Elapsed: {time_since(start, float(batch + 1) / batches)}'
+                f' Loss: {losses.val:.4f}({losses.avg:.4f})')
 
     return losses.avg, losses.list
 
@@ -207,7 +211,7 @@ def _validation_loop(model, dataloader, loss_fn):
     return val_loss, acc, elapsed_time
 
 
-def test_best_model(batch_size: int, num_workers: int, loss_fn):
+def test_best_model(batch_size: int, num_workers: int, loss_fn, print_fn_callback):
     model = SignatureNet.load_best_model()
     test_dataset = SignatureDataset("test", Config.CANVAS_SIZE, dim=(256, 256))
     test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=True,
@@ -220,15 +224,15 @@ def test_best_model(batch_size: int, num_workers: int, loss_fn):
     # tn, fp, fn, tp = confusion_matrix([0, 1, 0, 1], [1, 1, 1, 0]).ravel()
     matrix = confusion_matrix(trues, predictions)
     elapsed_time = time() - start_time
-    print(f'Test [avg_loss {test_loss:.6f}] - time: {elapsed_time:.0f}s')
-    print(report)
-    print(matrix)
+    print_fn_callback(f'Test [avg_loss {test_loss:.6f}] - time: {elapsed_time:.0f}s')
+    print_fn_callback(report)
+    print_fn_callback(matrix)
     return report, matrix
 
 
-def fit(batch_size: int, epochs_number: int):
+def fit(batch_size: int, epochs_number: int, print_fn_callback):
     # мб проверить сколько процессов занято и часть незанятых подлкючить
-    num_workers = cpu_count(logical=False) - 1  # 4 - 1 = 3
+    num_workers = cpu_count(logical=False)  # - 1
     seed_torch(seed=Config.SEED)
 
     train_dataset = SignatureDataset("train", Config.CANVAS_SIZE, dim=(256, 256))
@@ -240,7 +244,6 @@ def fit(batch_size: int, epochs_number: int):
                                    num_workers=num_workers, pin_memory=True, drop_last=True)
 
     model = SignatureNet().to(DEVICE)
-    print(model)
     weights_init(model)
 
     loss_function = BCELoss()
@@ -251,9 +254,10 @@ def fit(batch_size: int, epochs_number: int):
     avg_train_losses, avg_val_losses, = [], []
     early_stop_epoch_count = 0
 
+    print_fn_callback(f"Начало обучения: {datetime.now():%d.%m.%Y %H:%M:%S%z}")
     for epoch in range(epochs_number):
         start_time = time()
-        avg_train_loss, losses_list = _train_loop(train_loader, model, loss_function, optim, epoch)
+        avg_train_loss, losses_list = _train_loop(train_loader, model, loss_function, optim, epoch, print_fn_callback)
         elapsed = time() - start_time
 
         avg_train_losses.append(avg_train_loss)
@@ -262,21 +266,35 @@ def fit(batch_size: int, epochs_number: int):
 
         val_loss, acc, val_time = _validation_loop(model, validation_loader, loss_function)
         avg_val_losses.append(val_loss)
-        print(f'Epoch {epoch} - Train [avg_loss: {avg_train_loss:.4f} - std_loss: {std:.4f} time: {elapsed:.0f}s]; '
-              f'Val [avg_loss {val_loss:.6f}, acc {acc:.6f}, time: {val_time:.0f}s]')
+        print_fn_callback(
+            f'Epoch {epoch} - Train [avg_loss: {avg_train_loss:.4f} - std_loss: {std:.4f} time: {elapsed:.0f}s]; '
+            f'Val [avg_loss {val_loss:.6f}, acc {acc:.6f}, time: {val_time:.0f}s]')
 
         torch.save({'model': model.state_dict()}, OUTPUT_DIR + f'model_{epoch}.pt')
 
         if val_loss < best_loss:
             best_loss = val_loss
             early_stop_epoch_count = 0
-            print(f'Epoch {epoch} - Save Best Loss: {best_loss:.4f} Model')
+            print_fn_callback(f'Epoch {epoch} - Save Best Loss: {best_loss:.4f} Model')
             torch.save({'model': model.state_dict()}, BEST_MODEL)
         else:
             early_stop_epoch_count += 1
             if early_stop_epoch_count == Config.EARLY_STOPPING_EPOCH:
-                print(f"Early stopping. No better loss value for last {Config.EARLY_STOPPING_EPOCH} epochs")
+                print_fn_callback(f"Early stopping. No better loss value for last {Config.EARLY_STOPPING_EPOCH} epochs")
                 break
 
-    report, matrix = test_best_model(batch_size, num_workers, loss_function)
+    report, matrix = test_best_model(batch_size, num_workers, loss_function, print_fn_callback)
     return avg_train_losses, avg_val_losses, report, matrix
+
+
+def predict(model, image_path1, image_path2):
+    model.eval()
+
+    img1 = torch.tensor(PreprocessImage.transform_image(image_path1, Config.CANVAS_SIZE, (256, 256)), device=DEVICE)
+    img2 = torch.tensor(PreprocessImage.transform_image(image_path2, Config.CANVAS_SIZE, (256, 256)), device=DEVICE)
+
+    with torch.no_grad():
+        prediction = model(img1, img2)  # .squeeze()
+        prediction = label_dict[torch.round(prediction).item()]
+
+    return prediction

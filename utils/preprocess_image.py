@@ -199,3 +199,9 @@ class PreprocessImage:
             cropped = resized
 
         return cropped
+
+    @staticmethod
+    def transform_image(image_path,  canvas_size: Tuple[int, int], img_size: Tuple[int, int] = (170, 242)):
+        img = PreprocessImage.load_signature(image_path)
+        img = PreprocessImage.preprocess_signature(img, canvas_size, img_size)
+        return img

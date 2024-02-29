@@ -1,9 +1,10 @@
-/**.pt
-/test results.txt
-/train losses.txt
 /**.log
-/sandbox.py
-/crap.py
+/**.png
+/**.pt
+/**.txt
 /**.zip
+/crap.py
+/sandbox.py
+/savedmodels/**.pt
 /savedmodels/**.zip
 /images/**.png

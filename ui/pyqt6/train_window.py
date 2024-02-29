@@ -1,4 +1,5 @@
 import time
+from datetime import datetime
 
 from PyQt6.QtCore import QThreadPool
 from PyQt6.QtWidgets import QWidget
@@ -38,25 +39,24 @@ class TrainWindow(QWidget):
         pass
 
     def __train_model(self):
-        res = siamese_bce.fit(self.spin_box_batch_size.value(), self.spin_box_epochs_count.value())
+        self.plain_text_edit_log.clear()
+        res = siamese_bce.fit(self.spin_box_batch_size.value(), self.spin_box_epochs_count.value(),
+                              self.plain_text_edit_log.appendPlainText)
         return res
 
     def __show_result(self, result):
         # train_data = result["train"]
         # val_data = result["val"]
         train_data, val_data, report, matrix = result
-        print(train_data)
-        print(val_data)
-        print(report)
-        print(matrix)
-        # self.__plot_graphs(train_data, val_data)
+
+        self.__plot_graphs(train_data, val_data)
 
         # test_data = result["test"]
         # self.__show_report(test_data["report"])
         # self.__show_matrix(test_data["matrix"])
 
     def __thread_complete(self):
-        self.plain_text_edit_log.appendPlainText("Обучение закончилось!")
+        self.plain_text_edit_log.appendPlainText(f"Конец обучения {datetime.now():%d.%m.%Y %H:%M:%S%z}")
         self.__set_enabled_train_controls(True)
 
     def start_training_task(self):

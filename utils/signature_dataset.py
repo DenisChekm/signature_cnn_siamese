@@ -47,10 +47,6 @@ def get_test_dataframe():
     return test_df
 
 
-def preprocess_tensor(img):
-    return img.view(1, 150, 220).float().div(255)
-
-
 class SignatureDataset(Dataset):
     TRAIN_DF = get_train_dataframe()  # get_dataframe("train")
     VALIDATION_DF = get_validation_dataframe()  # get_dataframe("val")
@@ -71,13 +67,13 @@ class SignatureDataset(Dataset):
         real_file_path = self.real_file_names[index]
         forged_file_path = self.forged_file_names[index]
 
-        img1 = PreprocessImage.load_signature(real_file_path)
-        img2 = PreprocessImage.load_signature(forged_file_path)
+        img1 = PreprocessImage.transform_image(real_file_path, self.canvas_size, self.dim)
+        img2 = PreprocessImage.transform_image(forged_file_path, self.canvas_size, self.dim)
 
-        img1 = torch.tensor(PreprocessImage.preprocess_signature(img1, self.canvas_size, self.dim))
-        img2 = torch.tensor(PreprocessImage.preprocess_signature(img2, self.canvas_size, self.dim))
-        label = torch.tensor(self.labels[index], dtype=torch.long).float()
-        return preprocess_tensor(img1), preprocess_tensor(img2), label.float()
+        img1 = torch.tensor(img1, dtype=torch.float)
+        img2 = torch.tensor(img2, dtype=torch.float)
+        label = torch.tensor(self.labels[index], dtype=torch.float)  # dtype=torch.long).float()
+        return img1, img2, label
 
     def __get_dataframe_by_name(self, dataframe_name: str):
         match dataframe_name:
