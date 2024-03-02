@@ -1,72 +1,67 @@
-import cv2
-from PIL import Image
-
 from PyQt6.QtCore import QThreadPool
 from PyQt6.QtGui import QPixmap
-from PyQt6.QtWidgets import QWidget, QLabel
+from PyQt6.QtWidgets import QWidget, QLabel, QFileDialog, QMessageBox
 from PyQt6.uic import loadUi
 
 from model import siamese_bce
-from ui.pyqt6.worker import my_worker, my_worker_with_params, worker_calculate_data
+from ui.pyqt6.worker import worker_calculate_data
+
+FILE_DIALOG_IMAGES_FILTER = "Images (*.png *.jpg *.jpeg);;PNG (*.png);JPG (*.jpg);;JPEG (*.jpeg)"
+FILE_DIALOG_MODELS_FILTER = "Models *.pt"
 
 
-class TrainWindow(QWidget):
+class PredictWindow(QWidget):
     def __init__(self):
-        super(TrainWindow, self).__init__()
+        super(PredictWindow, self).__init__()
         loadUi("C:\\Users\\denle\\PycharmProjects\\signature_cnn_siamese\\ui\\pyqt6\\predict_view.ui", self)
 
         # self.setWindowIcon(QIcon("../../images/signature-icon-50.png"))
-        self.threadpool = QThreadPool()
+        # self.threadpool = QThreadPool()
         # print("Multithreading with maximum %d threads" % self.threadpool.maxThreadCount())
-        self.push_button_train.clicked.connect(self.start_training_task)
+        self.image_left_filename = None
+        self.image_right_filename = None
+        self.push_button_choose_image_left.clicked.connect(self.__load_left_image)
+        self.push_button_choose_image_right.clicked.connect(self.__load_right_image)
+        self.push_button_load_model.clicked.connect(self.__load_model)
+        self.push_button_predict.clicked.connect(self.__make_prediction)
 
-    def __set_enabled_train_controls(self, isEnable: bool):
-        self.push_button_train.setEnabled(isEnable)  # self.push_button_train.setText("Начать обучение")
-        self.push_button_test_model.setEnabled(isEnable)
-        self.group_box_train_params.setEnabled(isEnable)
+        self.model = siamese_bce.SignatureNet.load_best_model()
 
-    def load_image(self, file_name):
-        pixmap = QPixmap(file_name)
+    # def __set_enabled_train_controls(self, isEnable: bool):
+    #     self.push_button_train.setEnabled(isEnable)
+    #     self.push_button_test_model.setEnabled(isEnable)
+    #     self.group_box_train_params.setEnabled(isEnable)
 
-        self.label = QLabel(self)
-        self.label.setPixmap(pixmap)
-        self.label.resize(pixmap.width(), pixmap.height())
+    def __get_file(self, caption, files_filter):
+        file_name, _ = QFileDialog.getOpenFileName(self, caption=caption, directory="C:/", filter=files_filter)
+        return file_name
 
-        self.resize(pixmap.width(), pixmap.height())
+    def load_image(self, file_name, label: QLabel):
+        self.line_edit_prediction_result.clear()
+        label.setPixmap(QPixmap(file_name))
 
-    def __transform_image(self, filename):
-        image_bgr = cv2.imread(filename)
-        new_size = (250, 250)
-        image_bgr_resize = cv2.resize(image_bgr, new_size, interpolation=cv2.INTER_AREA)
-        image_rgb = cv2.cvtColor(image_bgr_resize, cv2.COLOR_BGR2RGB)
-        image_pil = Image.fromarray(image_rgb)
-        return ImageTk.PhotoImage(image_pil)
+    def __load_left_image(self):
+        file_name, _ = QFileDialog.getOpenFileName(self, "Выбор изображения подписи", "C:/", FILE_DIALOG_IMAGES_FILTER)
+        if file_name:
+            self.image_left_filename = file_name
+            self.load_image(file_name, self.label_left_image)
 
-    def load_image1(self):
-        filename = filedialog.askopenfilename(title="Выбор изображения подписи",
-                                              filetypes=[("Image files", ".png .jpg .jpeg"),
-                                                         ("PNG", ".png"), ("JPG", ".jpg"), ("JPEG", ".jpeg")])
-        if filename:
-            self.filename1 = filename
-            self.image1 = self.__transform_image(filename)
-            self.canvas1.create_image(0, 0, anchor=NW, image=self.image1)
+    def __load_right_image(self):
+        file_name, _ = QFileDialog.getOpenFileName(self, "Выбор изображения подписи", "C:/", FILE_DIALOG_IMAGES_FILTER)
+        if file_name:
+            self.image_right_filename = file_name
+            self.load_image(file_name, self.label_right_image)
 
-    def load_image2(self):
-        filename = filedialog.askopenfilename(title="Выбор изображения подписи",
-                                              filetypes=[("Image files", ".png .jpg .jpeg"),
-                                                         ("PNG", ".png"), ("JPG", ".jpg"), ("JPEG", ".jpeg")])
-        if filename:
-            self.filename2 = filename
-            self.image2 = self.__transform_image(filename)
-            self.canvas2.create_image(0, 0, anchor=NW, image=self.image2)
+    def __load_model(self):
+        file_name, _ = QFileDialog.getOpenFileName(self, "Выбор файла обученной модели сети", "C:/",
+                                                   FILE_DIALOG_MODELS_FILTER)
+        if file_name:
+            self.model = siamese_bce.SignatureNet.load_model(file_name)
 
-    def make_prediction(self):
-        if self.image1 is not None and self.image2 is not None:
-            cos_sim, confidence, predicted_label = siamese_bce.predict(self.siamese_model,
-                                                                        self.filename1,
-                                                                        self.filename2)
-            showinfo(title="Результат проверки", message=predicted_label)
-            self.predict_result_label.configure(text=predicted_label)
-
+    def __make_prediction(self):
+        if self.image_left_filename is not None and self.image_right_filename is not None:
+            predicted_label = siamese_bce.predict(self.model, self.image_left_filename, self.image_right_filename)
+            self.line_edit_prediction_result.setText(predicted_label)
+            QMessageBox.information(self, "Результат", predicted_label)
         else:
-            showerror(title="Ошибка", message="Нужно выбрать оба изображения")
+            QMessageBox.warning(self, "Предупреждение", "Нужно выбрать оба изображения")

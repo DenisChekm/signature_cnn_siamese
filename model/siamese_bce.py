@@ -13,27 +13,21 @@ from torch.nn.init import kaiming_normal_
 from torch.optim import Adam, Adamax, RMSprop, SGD
 from torch.utils.data import DataLoader
 
-from utils.average_meter import AverageMeter, time_since
-from utils.signature_dataset import SignatureDataset
-from utils.preprocess_image import PreprocessImage
-
 from sklearn.metrics import accuracy_score, classification_report, confusion_matrix, RocCurveDisplay, \
     ConfusionMatrixDisplay
 
-label_dict = {1.0: 'Подделанная', 0.0: 'Настоящая'}
+from utils.average_meter import AverageMeter, time_since
+from utils.signature_dataset import SignatureDataset
+from utils.preprocess_image import PreprocessImage
+from utils.config import Config
+
 DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 OUTPUT_DIR = "C:/Users/denle/PycharmProjects/signature_cnn_siamese/savedmodels/"
 if not os.path.exists(OUTPUT_DIR):
     os.makedirs(OUTPUT_DIR)
 
 BEST_MODEL = OUTPUT_DIR + 'best_loss.pt'
-
-
-class Config:
-    SEED = 42
-    EARLY_STOPPING_EPOCH = 5
-    PRINT_FREQ = 54  # 50
-    CANVAS_SIZE = (952, 1360)
+label_dict = {1.0: 'Подделанная', 0.0: 'Настоящая'}
 
 
 def seed_torch(seed):
@@ -144,14 +138,18 @@ class SignatureNet(Module):
         return result
 
     @staticmethod
-    def load_best_model():
+    def load_model(file_name):
         model = SignatureNet().to(DEVICE)
 
         if torch.cuda.is_available():
-            model.load_state_dict(torch.load(BEST_MODEL)['model'])
+            model.load_state_dict(torch.load(file_name)['model'])
         else:
-            model.load_state_dict(torch.load(BEST_MODEL, map_location=torch.device('cpu'))['model'])
+            model.load_state_dict(torch.load(file_name, map_location=torch.device('cpu'))['model'])
         return model  # TO DO move .to(DEVICE) here
+
+    @staticmethod
+    def load_best_model():
+        return SignatureNet.load_model(BEST_MODEL)
 
 
 def _make_predictions(model, dataloader, loss_fn):
@@ -214,7 +212,7 @@ def _validation_loop(model, dataloader, loss_fn):
 def test_best_model(batch_size: int, num_workers: int, loss_fn, print_fn_callback):
     model = SignatureNet.load_best_model()
     test_dataset = SignatureDataset("test", Config.CANVAS_SIZE, dim=(256, 256))
-    test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=True,
+    test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=True, # shuffle убрать?
                              num_workers=num_workers, pin_memory=True, drop_last=True)
 
     start_time = time()
@@ -294,7 +292,7 @@ def predict(model, image_path1, image_path2):
     img2 = torch.tensor(PreprocessImage.transform_image(image_path2, Config.CANVAS_SIZE, (256, 256)), device=DEVICE)
 
     with torch.no_grad():
-        prediction = model(img1, img2)  # .squeeze()
+        prediction = model(img1, img2)
         prediction = label_dict[torch.round(prediction).item()]
 
     return prediction

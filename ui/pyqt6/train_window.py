@@ -6,7 +6,7 @@ from PyQt6.QtWidgets import QWidget
 from PyQt6.uic import loadUi
 
 from model import siamese_bce
-from ui.pyqt6.worker import my_worker, my_worker_with_params, worker_calculate_data
+from ui.pyqt6.worker import worker_calculate_data
 
 
 class TrainWindow(QWidget):
@@ -25,7 +25,7 @@ class TrainWindow(QWidget):
         self.group_box_train_params.setEnabled(isEnable)
 
     def __plot_graphs(self, train_losses, val_losses):
-        train_avg_losses = train_losses["avg_loss"]  # {"train": {"std_loss": std_train_losses},
+        train_avg_losses = train_losses["avg_loss"]
         val_avg_losses = val_losses["avg_loss"]
         pass
 
@@ -40,13 +40,12 @@ class TrainWindow(QWidget):
 
     def __train_model(self):
         self.plain_text_edit_log.clear()
-        res = siamese_bce.fit(self.spin_box_batch_size.value(), self.spin_box_epochs_count.value(),
+        res = siamese_bce.fit(self.spin_box_batch_size.value(),
+                              self.spin_box_epochs_count.value(),
                               self.plain_text_edit_log.appendPlainText)
         return res
 
     def __show_result(self, result):
-        # train_data = result["train"]
-        # val_data = result["val"]
         train_data, val_data, report, matrix = result
 
         self.__plot_graphs(train_data, val_data)
