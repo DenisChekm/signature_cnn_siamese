@@ -22,7 +22,7 @@ from utils.preprocess_image import PreprocessImage
 from utils.config import Config
 
 DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-OUTPUT_DIR = "C:/Users/denle/PycharmProjects/signature_cnn_siamese/savedmodels/"
+OUTPUT_DIR = "./savedmodels/"
 if not os.path.exists(OUTPUT_DIR):
     os.makedirs(OUTPUT_DIR)
 

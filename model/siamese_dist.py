@@ -22,7 +22,7 @@ from utils.config import Config
 from model.loss.my_contrasive_loss import MyContrastiveLoss
 
 DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-OUTPUT_DIR = "C:/Users/denle/PycharmProjects/signature_cnn_siamese/savedmodels/"
+OUTPUT_DIR = "./savedmodels/"
 if not os.path.exists(OUTPUT_DIR):
     os.makedirs(OUTPUT_DIR)
 
@@ -143,6 +143,7 @@ class SignatureNet(Module):
     def make_predictions(self, dataloader, loss_fn):
         predictions, targets = [], []
         loss = 0
+        margin = loss_fn.get_margin()
 
         self.eval()
         with torch.no_grad():
@@ -157,7 +158,8 @@ class SignatureNet(Module):
                 predictions.append(euclidian_distance)
 
         targets = torch.cat(targets)
-        predictions = torch.where(torch.gt(torch.cat(predictions), 1), 1, 0)  # gr( ,margin)
+        predictions = torch.cat(predictions)
+        predictions = torch.where(torch.gt(predictions, margin), 1.0, 0.0)
         loss /= len(dataloader)
         return targets, predictions, loss
 
@@ -233,7 +235,7 @@ class SignatureNet(Module):
         with torch.no_grad():
             euclidian_distance = self(img1, img2)
             euclidian_distance = euclidian_distance.item()
-            euclidian_distance = 1.0 if euclidian_distance > 1 else 0.0  # > margin
+            euclidian_distance = 1.0 if euclidian_distance > 1.0 else 0.0  # > margin
             prediction = label_dict[euclidian_distance]
         return prediction
 

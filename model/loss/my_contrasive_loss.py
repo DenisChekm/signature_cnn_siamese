@@ -2,6 +2,7 @@ import torch
 
 
 class MyContrastiveLoss(torch.nn.Module):
+
     def __init__(self, margin=1.0):  # try change "1.0" to "2.0"
         super(MyContrastiveLoss, self).__init__()
         self.margin = margin
@@ -11,3 +12,6 @@ class MyContrastiveLoss(torch.nn.Module):
                                       label * torch.pow(torch.clamp(self.margin - euclidean_distance, min=0.0), 2))
 
         return loss_contrastive
+
+    def get_margin(self):
+        return self.margin

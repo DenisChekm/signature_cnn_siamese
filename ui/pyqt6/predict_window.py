@@ -13,7 +13,7 @@ FILE_DIALOG_MODELS_FILTER = "Models *.pt"
 class PredictWindow(QWidget):
     def __init__(self):
         super(PredictWindow, self).__init__()
-        loadUi("C:\\Users\\denle\\PycharmProjects\\signature_cnn_siamese\\ui\\pyqt6\\predict_view.ui", self)
+        loadUi("./ui/pyqt6/predict_view.ui", self)
 
         # self.setWindowIcon(QIcon("../../images/signature-icon-50.png"))
         # self.threadpool = QThreadPool()
@@ -25,7 +25,7 @@ class PredictWindow(QWidget):
         self.push_button_load_model.clicked.connect(self.__load_model)
         self.push_button_predict.clicked.connect(self.__make_prediction)
 
-        self.model = siamese_bce.SignatureNet.load_best_model()
+        self.model = None #siamese_bce.SignatureNet.load_best_model()
 
     # def __set_enabled_train_controls(self, isEnable: bool):
     #     self.push_button_train.setEnabled(isEnable)

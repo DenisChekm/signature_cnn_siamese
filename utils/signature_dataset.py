@@ -5,7 +5,7 @@ from torch.utils.data import Dataset
 
 from utils.preprocess_image import PreprocessImage
 
-DATA_DIR = "C:/Users/denle/PycharmProjects/sign_data/"
+DATA_DIR = "../sign_data/"
 
 
 def get_dataframe(file):

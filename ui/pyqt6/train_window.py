@@ -12,7 +12,7 @@ from ui.pyqt6.worker import worker_calculate_data
 class TrainWindow(QWidget):
     def __init__(self):
         super(TrainWindow, self).__init__()
-        loadUi("C:\\Users\\denle\\PycharmProjects\\signature_cnn_siamese\\ui\\pyqt6\\train_view.ui", self)
+        loadUi("./ui/pyqt6/train_view.ui", self)
 
         # self.setWindowIcon(QIcon("../../images/signature-icon-50.png"))
         self.threadpool = QThreadPool()
