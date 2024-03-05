@@ -3,7 +3,7 @@ import torch
 
 class MyContrastiveLoss(torch.nn.Module):
 
-    def __init__(self, margin=1.0):  # try change "1.0" to "2.0"
+    def __init__(self, margin=1.0):
         super(MyContrastiveLoss, self).__init__()
         self.margin = margin
 

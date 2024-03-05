@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>741</width>
-    <height>328</height>
+    <height>334</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -114,6 +114,19 @@
    </property>
    <property name="readOnly">
     <bool>true</bool>
+   </property>
+  </widget>
+  <widget class="QPushButton" name="push_button_show_train_window">
+   <property name="geometry">
+    <rect>
+     <x>540</x>
+     <y>250</y>
+     <width>181</width>
+     <height>24</height>
+    </rect>
+   </property>
+   <property name="text">
+    <string>Обучать сеть</string>
    </property>
   </widget>
  </widget>

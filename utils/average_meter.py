@@ -31,4 +31,4 @@ def time_since(start, percent):
     since = now - start
     es = since / percent
     remain = es - since
-    return '%s (remain %s)' % (as_minutes(since), as_minutes(remain))
+    return '%s (осталось %s)' % (as_minutes(since), as_minutes(remain))
