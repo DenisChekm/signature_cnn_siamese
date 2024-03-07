@@ -42,7 +42,7 @@ def get_train_dataframe_balance():
 
 
 def get_validation_dataframe_balance():
-    val_df = read_csv(DATA_DIR + "val_data.csv")
+    val_df = read_csv(DATA_DIR + "val_data_balanced.csv")
     val_df.rename(columns={"1": "label"}, inplace=True)
     val_df["image_real_paths"] = val_df["015/015_14.PNG"].apply(lambda x: BALANCE_DIR + x)
     val_df["image_forged_paths"] = val_df["015_forg/0106015_04.png"].apply(lambda x: BALANCE_DIR + x)
@@ -50,7 +50,7 @@ def get_validation_dataframe_balance():
 
 
 def get_test_dataframe_balance():
-    test_df = read_csv(DATA_DIR + "test_data.csv")
+    test_df = read_csv(DATA_DIR + "test_data_balanced.csv")
     test_df.rename(columns={"1": "label"}, inplace=True)
     test_df["image_real_paths"] = test_df["016/016_09.PNG"].apply(lambda x: BALANCE_DIR + x)
     test_df["image_forged_paths"] = test_df["016_forg/0202016_02.png"].apply(lambda x: BALANCE_DIR + x)
