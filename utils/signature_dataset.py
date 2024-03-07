@@ -34,27 +34,31 @@ def get_test_dataframe_no_balance():
 
 
 def get_train_dataframe_balance():
-    train_df = read_csv(DATA_DIR + "train_data_balanced.csv")
-    train_df.rename(columns={"1": "label"}, inplace=True)
-    train_df["image_real_paths"] = train_df["068/09_068.png"].apply(lambda x: BALANCE_DIR + x)
-    train_df["image_forged_paths"] = train_df["068_forg/03_0113068.PNG"].apply(lambda x: BALANCE_DIR + x)
+    train_df = read_csv(DATA_DIR + "train_data_balanced.csv", names=['image_real_paths', 'image_forged_paths', 'label'])
+    train_df["image_real_paths"] = train_df["image_real_paths"].apply(lambda x: BALANCE_DIR + x)
+    train_df["image_forged_paths"] = train_df["image_forged_paths"].apply(lambda x: BALANCE_DIR + x)
     return train_df
 
 
 def get_validation_dataframe_balance():
-    val_df = read_csv(DATA_DIR + "val_data_balanced.csv")
-    val_df.rename(columns={"1": "label"}, inplace=True)
-    val_df["image_real_paths"] = val_df["015/015_14.PNG"].apply(lambda x: BALANCE_DIR + x)
-    val_df["image_forged_paths"] = val_df["015_forg/0106015_04.png"].apply(lambda x: BALANCE_DIR + x)
+    val_df = read_csv(DATA_DIR + "val_data_balanced.csv", names=['image_real_paths', 'image_forged_paths', 'label'])
+    val_df["image_real_paths"] = val_df["image_real_paths"].apply(lambda x: BALANCE_DIR + x)
+    val_df["image_forged_paths"] = val_df["image_forged_paths"].apply(lambda x: BALANCE_DIR + x)
     return val_df
 
 
 def get_test_dataframe_balance():
-    test_df = read_csv(DATA_DIR + "test_data_balanced.csv")
-    test_df.rename(columns={"1": "label"}, inplace=True)
-    test_df["image_real_paths"] = test_df["016/016_09.PNG"].apply(lambda x: BALANCE_DIR + x)
-    test_df["image_forged_paths"] = test_df["016_forg/0202016_02.png"].apply(lambda x: BALANCE_DIR + x)
+    test_df = read_csv(DATA_DIR + "test_data_balanced.csv", names=['image_real_paths', 'image_forged_paths', 'label'])
+    test_df["image_real_paths"] = test_df["image_real_paths"].apply(lambda x: BALANCE_DIR + x)
+    test_df["image_forged_paths"] = test_df["image_forged_paths"].apply(lambda x: BALANCE_DIR + x)
     return test_df
+
+
+def get_dataframe_balance(csv_file_name: str):
+    df = read_csv(DATA_DIR + csv_file_name + ".csv", names=['image_real_paths', 'image_forged_paths', 'label'])
+    df["image_real_paths"] = df["image_real_paths"].apply(lambda x: BALANCE_DIR + x)
+    df["image_forged_paths"] = df["image_forged_paths"].apply(lambda x: BALANCE_DIR + x)
+    return df
 
 
 class SignatureDataset(Dataset):
@@ -62,9 +66,9 @@ class SignatureDataset(Dataset):
     # VALIDATION_DF = get_validation_dataframe_no_balance()
     # TEST_DF = get_test_dataframe_no_balance()
 
-    TRAIN_DF = get_train_dataframe_balance()
-    VALIDATION_DF = get_validation_dataframe_balance()
-    TEST_DF = get_test_dataframe_balance()
+    TRAIN_DF = get_dataframe_balance("train_data_balanced")  # get_train_dataframe_balance()
+    VALIDATION_DF = get_dataframe_balance("val_data_balanced")  # get_validation_dataframe_balance()
+    TEST_DF = get_dataframe_balance("test_data_balanced")  # get_test_dataframe_balance()
 
     def __init__(self, df_name: str, canvas_size, dim=(256, 256)):
         self.df = self.__get_dataframe_by_name(df_name)
