@@ -21,7 +21,7 @@ from utils.config import Config
 from model.loss.my_contrasive_loss import MyContrastiveLoss
 
 DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-NUM_WORKERS = cpu_count(logical=False) - 1
+NUM_WORKERS = cpu_count(logical=False)  # - 1
 
 OUTPUT_DIR = "./savedmodels/"
 if not os.path.exists(OUTPUT_DIR):
@@ -60,11 +60,13 @@ def linear_block(in_features, out_features):
 
 def weights_init(model: Module):
     for module in model.modules():
-        if isinstance(module, Conv2d):
+        if isinstance(module, Conv2d):  # (Conv2d, Linear)):
             kaiming_normal_(module.weight, nonlinearity='relu')
 
 
 class SignatureNet(Module):
+    seed_torch(seed=Config.SEED)
+
     def __init__(self):
         super(SignatureNet, self).__init__()
 
@@ -99,7 +101,7 @@ class SignatureNet(Module):
             Dropout(p=0.4),
             # linear_block(2048, 1024),
             # linear_block(1024, 512),
-            linear_block(512, 256)
+            linear_block(512, 128)
         )
 
         self.euclidean_distance = PairwiseDistance()
@@ -107,7 +109,6 @@ class SignatureNet(Module):
     def forward_once(self, img):
         # Inputs need to have 4 dimensions (batch x channels x height x width), and also be between [0, 1]
         x = img.view(-1, 1, 150, 220).div(255)
-        # x = self.al(x)
         x = self.conv(x)
         x = self.adap_avg_pool(x)
         x = torch.flatten(x, start_dim=1)
@@ -189,15 +190,13 @@ class SignatureNet(Module):
         return val_loss, losses, acc
 
     def fit(self, batch_size: int, epochs_number: int, print_fn):
-        seed_torch(seed=Config.SEED)
-
         train_dataset = SignatureDataset("train", Config.CANVAS_SIZE, dim=(256, 256))
-        train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True,
-                                  num_workers=NUM_WORKERS, pin_memory=True, drop_last=True)
+        train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=NUM_WORKERS,
+                                  pin_memory=True, drop_last=True)
 
         validation_dataset = SignatureDataset("val", Config.CANVAS_SIZE, dim=(256, 256))
-        validation_loader = DataLoader(validation_dataset, batch_size=batch_size,
-                                       num_workers=NUM_WORKERS, pin_memory=True, drop_last=True)
+        validation_loader = DataLoader(validation_dataset, batch_size=batch_size, num_workers=NUM_WORKERS,
+                                       pin_memory=True, drop_last=True)
 
         self.to(DEVICE)
         weights_init(self)
@@ -212,13 +211,12 @@ class SignatureNet(Module):
 
         for epoch in range(epochs_number):
             start_time = time()
-            avg_train_loss, losses_list, train_acc = self.__train_loop(train_loader, contr_loss, optim, epoch,
-                                                                       print_fn)
+            avg_train_loss, losses_list, train_acc = self.__train_loop(train_loader, contr_loss, optim, epoch, print_fn)
             train_loop_time = time() - start_time
 
             avg_train_losses.append(avg_train_loss)
-            std = np.std(losses_list)
-            std_train_losses.append(std)
+            train_std = np.std(losses_list)
+            std_train_losses.append(train_std)
 
             start_time = time()
             avg_val_loss, val_losses, val_acc = self.__validation_loop(validation_loader, contr_loss)
@@ -229,7 +227,7 @@ class SignatureNet(Module):
             std_val_losses.append(val_std)
 
             print_fn(
-                f'Эпоха {epoch} - время: {train_loop_time:.0f}s - loss: {avg_train_loss:.4f} - std_loss: {std:.4f} - accuracy: {train_acc:.4f}'
+                f'Эпоха {epoch} - время: {train_loop_time:.0f}s - loss: {avg_train_loss:.4f} - std_loss: {train_std:.4f} - accuracy: {train_acc:.4f}'
                 f' - время: {val_loop_time:.0f}s - val_loss {avg_val_loss:.4f} - val_std_loss: {val_std:.4f} - val_accuracy: {val_acc:.4f}')
 
             torch.save({'model': self.state_dict()}, OUTPUT_DIR + f'model_{epoch}.pt')
@@ -243,7 +241,7 @@ class SignatureNet(Module):
                 early_stop_epoch_count += 1
                 if early_stop_epoch_count == Config.EARLY_STOPPING_EPOCH:
                     print_fn(
-                        f"Раняя остановка. За последние {Config.EARLY_STOPPING_EPOCH} эпох значение ошибки валидации не уменьшилось")
+                        f"Ранняя остановка. За последние {Config.EARLY_STOPPING_EPOCH} эпох значение ошибки валидации не уменьшилось")
                     break
 
         self.load_best_model()
@@ -260,24 +258,11 @@ class SignatureNet(Module):
         report = classification_report(trues, predictions, output_dict=True)
         matrix = confusion_matrix(trues, predictions)
         elapsed_time = time() - start_time
-        print_fn(f'Тест - время: {elapsed_time:.0f}s - avg_loss: {test_loss:.5f} - std_loss: {np.std(losses):.5f} - {report["accuracy"]:.5f}')
+        print_fn(
+            f'Тест - время: {elapsed_time:.0f}s - avg_loss: {test_loss:.5f} - std_loss: {np.std(losses):.5f} - {report["accuracy"]:.5f}')
         return report, matrix
 
-    def predict(self, image_path1, image_path2):
-
-        img1 = torch.tensor(PreprocessImage.transform_image(image_path1, Config.CANVAS_SIZE, (256, 256)), device=DEVICE)
-        img2 = torch.tensor(PreprocessImage.transform_image(image_path2, Config.CANVAS_SIZE, (256, 256)), device=DEVICE)
-
-        self.eval()
-        with torch.no_grad():
-            euclidian_distance = self(img1, img2)
-            euclidian_distance = euclidian_distance.item()
-            euclidian_distance = 1.0 if euclidian_distance > THRESHOLD else 0.0
-            prediction = label_dict[euclidian_distance]
-        return prediction
-
     def test_model_by_name(self, model_name, batch_size: int, print_fn):
-        seed_torch(seed=Config.SEED)
         self.load_model(model_name)
         test_dataset = SignatureDataset("test", Config.CANVAS_SIZE, dim=(256, 256))
         test_loader = DataLoader(test_dataset, batch_size=batch_size, num_workers=NUM_WORKERS,
@@ -294,3 +279,15 @@ class SignatureNet(Module):
 
     def test_best_model(self, batch_size: int, print_fn_callback):
         return self.test_model_by_name(BEST_MODEL, batch_size, print_fn_callback)
+
+    def predict(self, image_path1, image_path2):
+        img1 = torch.tensor(PreprocessImage.transform_image(image_path1, Config.CANVAS_SIZE, (256, 256)), device=DEVICE)
+        img2 = torch.tensor(PreprocessImage.transform_image(image_path2, Config.CANVAS_SIZE, (256, 256)), device=DEVICE)
+
+        self.eval()
+        with torch.no_grad():
+            euclidian_distance = self(img1, img2)
+            euclidian_distance = euclidian_distance.item()
+            euclidian_distance = 1.0 if euclidian_distance > THRESHOLD else 0.0
+            prediction = label_dict[euclidian_distance]
+        return prediction

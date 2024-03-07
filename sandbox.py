@@ -1,16 +1,11 @@
 from datetime import datetime
 import logging
 
-import torch
-from sklearn.metrics import ConfusionMatrixDisplay
-from torch.nn.functional import normalize, cosine_similarity, pairwise_distance
-
-from model.siamese_model import SiameseModel
 from model import siamese_bce, siamese_dist
 
 PREDICT_FOLDER = "../sign_data/predict/"
 BATCH_SIZE = 32
-EPOCHS = 20
+EPOCHS = 50
 
 
 def train_test_predict_bce(output_fn_callback):
@@ -26,15 +21,15 @@ def train_test_predict_bce(output_fn_callback):
     # output_fn_callback(siamese_bce.predict(model, path_1, path_2))
 
 
-def train_test_predict_dist(output_fn_callback):
-    output_fn_callback(f"> {siamese_dist.THRESHOLD}")
+def train_test_predict_dist(output_fn):
+    output_fn(f"> {siamese_dist.THRESHOLD}")
     model = siamese_dist.SignatureNet()
-    output_fn_callback(model)
+    output_fn(model)
 
-    model.fit(BATCH_SIZE, EPOCHS, output_fn_callback)
-    report, matrix = model.test(BATCH_SIZE, output_fn_callback)
-    output_fn_callback(report)
-    output_fn_callback(matrix)
+    model.fit(BATCH_SIZE, EPOCHS, output_fn)
+    report, matrix = model.test(BATCH_SIZE, output_fn)
+    output_fn(report)
+    output_fn(matrix)
 
     # path_1 = PREDICT_FOLDER + "i am.jpg"
     # path_2 = PREDICT_FOLDER + "f.jpg"
@@ -57,8 +52,7 @@ def train():
     train_test_predict_dist(logging.info)
 
 
-def test():
-    _ = SiameseModel.test_model_best_loss()
+    # _ = SiameseModel.test_model_best_loss()
 
 
 if __name__ == '__main__':

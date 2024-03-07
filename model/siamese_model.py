@@ -79,14 +79,6 @@ class AverageMeter(object):
         self.sum = 0
         self.count = 0
         self.list = []
-        self.reset()
-
-    def reset(self):
-        self.val = 0
-        self.avg = 0
-        self.sum = 0
-        self.count = 0
-        self.list = []
 
     def update(self, val, n=1):
         self.val = val
@@ -209,12 +201,9 @@ def prin_layers_info(model):
 def init_weight_in_layers(model: nn.Module):
     module_list = [module for module in model.modules()]  # this is needed
     flatted_list = flatten_model(module_list)
-
     for count, value in enumerate(flatted_list):
-
         if isinstance(value, (nn.Conv2d, nn.Linear)):
             nn.init.kaiming_normal_(value.weight, nonlinearity='relu')
-
 
 
 class SigNet(nn.Module):
