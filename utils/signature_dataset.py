@@ -9,49 +9,11 @@ DATA_DIR = "../sign_data/"
 BALANCE_DIR = "../sign_data/dataset/"
 
 
-def get_train_dataframe_no_balance():
-    train_df = read_csv(DATA_DIR + "train_data.csv")
-    train_df.rename(columns={"1": "label"}, inplace=True)
-    train_df["image_real_paths"] = train_df["033/02_033.png"].apply(lambda x: DATA_DIR + f"train/{x}")
-    train_df["image_forged_paths"] = train_df["033_forg/03_0203033.PNG"].apply(lambda x: DATA_DIR + f"train/{x}")
-    return train_df
-
-
-def get_validation_dataframe_no_balance():
-    val_df = read_csv(DATA_DIR + "val_data.csv")
-    val_df.rename(columns={"1": "label"}, inplace=True)
-    val_df["image_real_paths"] = val_df["047/01_047.png"].apply(lambda x: DATA_DIR + f"val/{x}")
-    val_df["image_forged_paths"] = val_df["047_forg/02_0113047.PNG"].apply(lambda x: DATA_DIR + f"val/{x}")
-    return val_df
-
-
-def get_test_dataframe_no_balance():
-    test_df = read_csv(DATA_DIR + "test_data.csv")
-    test_df.rename(columns={"1": "label"}, inplace=True)
-    test_df["image_real_paths"] = test_df["068/09_068.png"].apply(lambda x: DATA_DIR + f"test/{x}")
-    test_df["image_forged_paths"] = test_df["068_forg/03_0113068.PNG"].apply(lambda x: DATA_DIR + f"test/{x}")
-    return test_df
-
-
-def get_train_dataframe_balance():
-    train_df = read_csv(DATA_DIR + "train_data_balanced.csv", names=['image_real_paths', 'image_forged_paths', 'label'])
-    train_df["image_real_paths"] = train_df["image_real_paths"].apply(lambda x: BALANCE_DIR + x)
-    train_df["image_forged_paths"] = train_df["image_forged_paths"].apply(lambda x: BALANCE_DIR + x)
-    return train_df
-
-
-def get_validation_dataframe_balance():
-    val_df = read_csv(DATA_DIR + "val_data_balanced.csv", names=['image_real_paths', 'image_forged_paths', 'label'])
-    val_df["image_real_paths"] = val_df["image_real_paths"].apply(lambda x: BALANCE_DIR + x)
-    val_df["image_forged_paths"] = val_df["image_forged_paths"].apply(lambda x: BALANCE_DIR + x)
-    return val_df
-
-
-def get_test_dataframe_balance():
-    test_df = read_csv(DATA_DIR + "test_data_balanced.csv", names=['image_real_paths', 'image_forged_paths', 'label'])
-    test_df["image_real_paths"] = test_df["image_real_paths"].apply(lambda x: BALANCE_DIR + x)
-    test_df["image_forged_paths"] = test_df["image_forged_paths"].apply(lambda x: BALANCE_DIR + x)
-    return test_df
+def get_dataframe_no_balance(csv_file_name: str, folder: str):
+    df = read_csv(DATA_DIR + csv_file_name + ".csv", names=['image_real_paths', 'image_forged_paths', 'label'])
+    df["image_real_paths"] = df["image_real_paths"].apply(lambda x: DATA_DIR + folder + "/" + x)
+    df["image_forged_paths"] = df["image_forged_paths"].apply(lambda x: DATA_DIR + folder + "/" + x)
+    return df
 
 
 def get_dataframe_balance(csv_file_name: str):
@@ -62,13 +24,13 @@ def get_dataframe_balance(csv_file_name: str):
 
 
 class SignatureDataset(Dataset):
-    # TRAIN_DF = get_train_dataframe_no_balance()
-    # VALIDATION_DF = get_validation_dataframe_no_balance()
-    # TEST_DF = get_test_dataframe_no_balance()
+    TRAIN_DF = get_dataframe_no_balance('train_data', 'train')
+    VALIDATION_DF = get_dataframe_no_balance('val_data', 'val')
+    TEST_DF = get_dataframe_no_balance('test_data', 'test')
 
-    TRAIN_DF = get_dataframe_balance("train_data_balanced")  # get_train_dataframe_balance()
-    VALIDATION_DF = get_dataframe_balance("val_data_balanced")  # get_validation_dataframe_balance()
-    TEST_DF = get_dataframe_balance("test_data_balanced")  # get_test_dataframe_balance()
+    # TRAIN_DF = get_dataframe_balance("train_data_balanced")
+    # VALIDATION_DF = get_dataframe_balance("val_data_balanced")
+    # TEST_DF = get_dataframe_balance("test_data_balanced")
 
     def __init__(self, df_name: str, canvas_size, dim=(256, 256)):
         self.df = self.__get_dataframe_by_name(df_name)
