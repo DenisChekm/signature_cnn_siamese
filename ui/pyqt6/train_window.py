@@ -2,7 +2,7 @@ from datetime import datetime
 
 from PyQt6.QtCore import QThreadPool
 from PyQt6.QtGui import QPixmap
-from PyQt6.QtWidgets import QWidget, QTableWidget, QTableWidgetItem
+from PyQt6.QtWidgets import QWidget, QTableWidgetItem
 from PyQt6.uic import loadUi
 from pyqtgraph import PlotWidget, mkPen
 from sklearn.metrics import ConfusionMatrixDisplay
@@ -40,25 +40,27 @@ class TrainWindow(QWidget):
         self.push_button_train.clicked.connect(self.start_training_task)
 
         init_plot(self.widget_plot_loss, "График ошибки", "Средняя ошибка")
-        init_plot(self.widget_plot_acc, "График аккуратности", "Точность")
+        init_plot(self.widget_plot_acc, "График аккуратности", "Аккуратность")
 
     def __set_enabled_train_controls(self, isEnable: bool):
         self.push_button_train.setEnabled(isEnable)  # self.push_button_train.setText("Начать обучение")
-        self.push_button_test_model.setEnabled(isEnable)
+        self.push_button_show_predict_window.setEnabled(isEnable)
         self.group_box_train_params.setEnabled(isEnable)
 
-    def __plot_graphs(self, avg_train_losses, avg_val_losses, std_train_losses, std_val_losses):
+    def __plot_graphs(self, avg_train_losses, avg_val_losses, acc_train_list, acc_val_list):
         plot_graph(self.widget_plot_loss, avg_train_losses, avg_val_losses)
-        plot_graph(self.widget_plot_acc, std_train_losses, std_val_losses)
+        plot_graph(self.widget_plot_acc, acc_train_list, acc_val_list)
 
     def __set_table_metrics(self, report: dict):
+        acc = report['accuracy']
         label_real = report['0.0']
         label_forged = report['1.0']
-        acc = report['accuracy']
+        self.table_widget_report.setItem(0, 1, QTableWidgetItem(f"{acc:.4f}"))
         self.table_widget_report.setItem(0, 2, QTableWidgetItem(f"{label_real['precision']:.4f}"))
         self.table_widget_report.setItem(0, 3, QTableWidgetItem(f"{label_real['recall']:.4f}"))
         self.table_widget_report.setItem(0, 4, QTableWidgetItem(f"{label_real['f1-score']:.4f}"))
 
+        self.table_widget_report.setItem(1, 1, QTableWidgetItem(f"{acc:.4f}"))
         self.table_widget_report.setItem(1, 2, QTableWidgetItem(f"{label_forged['precision']:.4f}"))
         self.table_widget_report.setItem(1, 3, QTableWidgetItem(f"{label_forged['recall']:.4f}"))
         self.table_widget_report.setItem(1, 4, QTableWidgetItem(f"{label_forged['f1-score']:.4f}"))
@@ -80,18 +82,18 @@ class TrainWindow(QWidget):
 
         self.model = siamese_dist.SignatureNet()
         batches = self.spin_box_batch_size.value()
-        avg_train_losses, avg_val_losses, std_train_losses, std_val_losses = self.model.fit(batches,
+        avg_train_losses, avg_val_losses, acc_train_list, acc_val_list = self.model.fit(batches,
                                                                                             self.spin_box_epochs_count.value(),
                                                                                             self.plain_text_edit_log.appendPlainText)
 
         report, matrix = self.model.test(batches, self.plain_text_edit_log.appendPlainText)
 
-        return avg_train_losses, avg_val_losses, std_train_losses, std_val_losses, report, matrix
+        return avg_train_losses, avg_val_losses, acc_train_list, acc_val_list, report, matrix
 
     def __show_result(self, result):
-        avg_train_losses, avg_val_losses, std_train_losses, std_val_losses, report, matrix = result
+        avg_train_losses, avg_val_losses, acc_train_list, acc_val_list, report, matrix = result
 
-        self.__plot_graphs(avg_train_losses, avg_val_losses, std_train_losses, std_val_losses)
+        self.__plot_graphs(avg_train_losses, avg_val_losses, acc_train_list, acc_val_list)
         self.__set_table_metrics(report)
         self.__show_confusion_matrix(matrix)
 

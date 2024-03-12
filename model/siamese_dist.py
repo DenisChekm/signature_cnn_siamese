@@ -18,18 +18,17 @@ from utils.average_meter import AverageMeter, time_since
 from utils.signature_dataset import SignatureDataset
 from utils.preprocess_image import PreprocessImage
 from utils.config import Config
-from model.loss.my_contrasive_loss import MyContrastiveLoss
+from model.loss.my_contrasive_loss import ContrastiveLoss
 
 DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-NUM_WORKERS = cpu_count(logical=False)  # - 1
+NUM_WORKERS = cpu_count(logical=False)  - 1
 
 OUTPUT_DIR = "./savedmodels/"
 if not os.path.exists(OUTPUT_DIR):
     os.makedirs(OUTPUT_DIR)
 BEST_MODEL = OUTPUT_DIR + 'best_loss.pt'
 
-label_dict = {1.0: 'Подделанная', 0.0: 'Настоящая'}
-contr_loss = MyContrastiveLoss()
+contrastive_loss = ContrastiveLoss()
 THRESHOLD = 0.5
 
 
@@ -65,23 +64,9 @@ def weights_init(model: Module):
 
 
 class SignatureNet(Module):
-    seed_torch(seed=Config.SEED)
 
     def __init__(self):
         super(SignatureNet, self).__init__()
-
-        # self.al = alexnet()
-        # self.al.classifier = torch.nn.Identity()
-
-        # self.conv = Sequential(
-        #     conv_block(1, 64, 11, stride=4, padding=0),
-        #     MaxPool2d(3, 2),
-        #     conv_block(64, 128, 5, padding=2),
-        #     MaxPool2d(3, 2),
-        #     conv_block(128, 256, 3, padding=1),
-        #     MaxPool2d(3, 2)
-        # )
-        # self.adap_avg_pool = AdaptiveAvgPool2d(3)
 
         self.conv = Sequential(
             conv_block(1, 96, 11, stride=4, padding=2),
@@ -89,9 +74,6 @@ class SignatureNet(Module):
             conv_block(96, 128, 5, padding=2),
             MaxPool2d(3, 2),
             conv_block(128, 256, 3, padding=1),
-            # conv_block(192, 384, 3, padding=1),
-            # conv_block(384, 256, 3, padding=1),
-            # conv_block(256, 256, 3, padding=1),
             MaxPool2d(3, 2)
         )
         self.adap_avg_pool = AdaptiveAvgPool2d(3)
@@ -99,15 +81,12 @@ class SignatureNet(Module):
         self.fc = Sequential(
             linear_block(256 * 3 * 3, 512),
             Dropout(p=0.4),
-            # linear_block(2048, 1024),
-            # linear_block(1024, 512),
             linear_block(512, 128)
         )
 
         self.euclidean_distance = PairwiseDistance()
 
     def forward_once(self, img):
-        # Inputs need to have 4 dimensions (batch x channels x height x width), and also be between [0, 1]
         x = img.view(-1, 1, 150, 220).div(255)
         x = self.conv(x)
         x = self.adap_avg_pool(x)
@@ -159,7 +138,8 @@ class SignatureNet(Module):
         predictions = torch.where(torch.gt(predictions, THRESHOLD), 1.0, 0.0)
         targets, predictions = targets.to('cpu'), predictions.to('cpu')
         acc = accuracy_score(targets, predictions)
-        return losses.avg, losses.list, acc
+        std = np.std(losses.list)
+        return losses.avg, std, acc
 
     def make_predictions(self, dataloader, loss_fn):
         targets, predictions = [], []
@@ -181,15 +161,18 @@ class SignatureNet(Module):
         predictions = torch.cat(predictions)
         predictions = torch.where(torch.gt(predictions, THRESHOLD), 1.0, 0.0)
         loss /= len(dataloader)
-        return targets, predictions, losses.avg, losses.list
+        std = np.std(losses.list)
+        return targets, predictions, losses.avg, std
 
     def __validation_loop(self, dataloader, loss_fn):
-        trues, predictions, val_loss, losses = self.make_predictions(dataloader, loss_fn)
+        trues, predictions, val_loss, std = self.make_predictions(dataloader, loss_fn)
         trues, predictions = trues.to('cpu'), predictions.to('cpu')
         acc = accuracy_score(trues, predictions)
-        return val_loss, losses, acc
+        return val_loss, std, acc
 
     def fit(self, batch_size: int, epochs_number: int, print_fn):
+        seed_torch(seed=Config.SEED)
+
         train_dataset = SignatureDataset("train", Config.CANVAS_SIZE, dim=(256, 256))
         train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=NUM_WORKERS,
                                   pin_memory=True, drop_last=True)
@@ -201,34 +184,36 @@ class SignatureNet(Module):
         self.to(DEVICE)
         weights_init(self)
 
-        # loss_function = MyContrastiveLoss()
+        # loss_function = ContrastiveLoss()
         optim = Adamax(self.parameters())
 
         best_loss = np.inf
-        std_train_losses, std_val_losses, = [], []
         avg_train_losses, avg_val_losses, = [], []
+        std_train_losses, std_val_losses, = [], []
+        acc_train_list, acc_val_list = [], []
         early_stop_epoch_count = 0
 
         for epoch in range(epochs_number):
             start_time = time()
-            avg_train_loss, losses_list, train_acc = self.__train_loop(train_loader, contr_loss, optim, epoch, print_fn)
+            avg_train_loss, std_train_loss, train_acc = self.__train_loop(train_loader, contrastive_loss, optim, epoch,
+                                                                          print_fn)
             train_loop_time = time() - start_time
 
             avg_train_losses.append(avg_train_loss)
-            train_std = np.std(losses_list)
-            std_train_losses.append(train_std)
+            std_train_losses.append(std_train_loss)
+            acc_train_list.append(train_acc)
 
             start_time = time()
-            avg_val_loss, val_losses, val_acc = self.__validation_loop(validation_loader, contr_loss)
+            avg_val_loss, std_val_loss, val_acc = self.__validation_loop(validation_loader, contrastive_loss)
             val_loop_time = time() - start_time
 
             avg_val_losses.append(avg_val_loss)
-            val_std = np.std(val_losses)
-            std_val_losses.append(val_std)
+            std_val_losses.append(std_val_loss)
+            acc_val_list.append(val_acc)
 
             print_fn(
-                f'Эпоха {epoch} - время: {train_loop_time:.0f}s - loss: {avg_train_loss:.4f} - std_loss: {train_std:.4f} - accuracy: {train_acc:.4f}'
-                f' - время: {val_loop_time:.0f}s - val_loss {avg_val_loss:.4f} - val_std_loss: {val_std:.4f} - val_accuracy: {val_acc:.4f}')
+                f'Эпоха {epoch} - время: {train_loop_time:.0f}s - loss: {avg_train_loss:.4f} - std_loss: {std_train_loss:.4f} - acc: {train_acc:.4f}'
+                f' - время: {val_loop_time:.0f}s - val_loss {avg_val_loss:.4f} - val_std_loss: {std_val_loss:.4f} - val_acc: {val_acc:.4f}')
 
             torch.save({'model': self.state_dict()}, OUTPUT_DIR + f'model_{epoch}.pt')
 
@@ -245,31 +230,31 @@ class SignatureNet(Module):
                     break
 
         self.load_best_model()
-        return avg_train_losses, avg_val_losses, std_train_losses, std_val_losses
+        return avg_train_losses, avg_val_losses, acc_train_list, acc_val_list  #std_train_losses, std_val_losses
 
     def test(self, batch_size: int, print_fn):
         test_dataset = SignatureDataset("test", Config.CANVAS_SIZE, dim=(256, 256))
-        test_loader = DataLoader(test_dataset, batch_size=batch_size, num_workers=NUM_WORKERS,
-                                 pin_memory=True, drop_last=True)
+        test_loader = DataLoader(test_dataset, batch_size=batch_size, num_workers=NUM_WORKERS, drop_last=True,
+                                 pin_memory=True)
 
         start_time = time()
-        trues, predictions, test_loss, losses = self.make_predictions(test_loader, contr_loss)
+        trues, predictions, test_loss, losses = self.make_predictions(test_loader, contrastive_loss)
         trues, predictions = trues.to('cpu'), predictions.to('cpu')
         report = classification_report(trues, predictions, output_dict=True)
         matrix = confusion_matrix(trues, predictions)
         elapsed_time = time() - start_time
         print_fn(
-            f'Тест - время: {elapsed_time:.0f}s - avg_loss: {test_loss:.5f} - std_loss: {np.std(losses):.5f} - {report["accuracy"]:.5f}')
+            f'Тест - время: {elapsed_time:.0f}s - avg_loss: {test_loss:.5f} - std_loss: {np.std(losses):.5f} - acc": {report["accuracy"]:.5f}')
         return report, matrix
 
     def test_model_by_name(self, model_name, batch_size: int, print_fn):
         self.load_model(model_name)
         test_dataset = SignatureDataset("test", Config.CANVAS_SIZE, dim=(256, 256))
-        test_loader = DataLoader(test_dataset, batch_size=batch_size, num_workers=NUM_WORKERS,
-                                 pin_memory=True, drop_last=True)
+        test_loader = DataLoader(test_dataset, batch_size=batch_size, num_workers=NUM_WORKERS, drop_last=True,
+                                 pin_memory=True)
 
         start_time = time()
-        trues, predictions, test_loss, losses = self.make_predictions(test_loader, contr_loss)
+        trues, predictions, test_loss, losses = self.make_predictions(test_loader, contrastive_loss)
         trues, predictions = trues.to('cpu'), predictions.to('cpu')
         report = classification_report(trues, predictions)
         matrix = confusion_matrix(trues, predictions)
@@ -286,8 +271,6 @@ class SignatureNet(Module):
 
         self.eval()
         with torch.no_grad():
-            euclidian_distance = self(img1, img2)
-            euclidian_distance = euclidian_distance.item()
-            euclidian_distance = 1.0 if euclidian_distance > THRESHOLD else 0.0
-            prediction = label_dict[euclidian_distance]
+            euclidian_distance = self(img1, img2).item()
+        prediction = 'Подделанная' if euclidian_distance > THRESHOLD else 'Настоящая'
         return prediction

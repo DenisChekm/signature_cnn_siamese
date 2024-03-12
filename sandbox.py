@@ -2,6 +2,8 @@ from datetime import datetime
 import logging
 
 from model import siamese_bce, siamese_dist
+from model.loss.my_contrasive_loss import ContrastiveLoss
+from utils.config import Config
 
 PREDICT_FOLDER = "../sign_data/predict/"
 BATCH_SIZE = 32
@@ -23,6 +25,7 @@ def train_test_predict_bce(output_fn_callback):
 
 def train_test_predict_dist(output_fn):
     output_fn(f"> {siamese_dist.THRESHOLD}")
+    output_fn(f"margin = {ContrastiveLoss().get_margin()}")
     model = siamese_dist.SignatureNet()
     output_fn(model)
 
@@ -33,11 +36,14 @@ def train_test_predict_dist(output_fn):
 
     # path_1 = PREDICT_FOLDER + "i am.jpg"
     # path_2 = PREDICT_FOLDER + "f.jpg"
-    # model = siamese_dist.SignatureNet.load_best_model()
-    # output_fn_callback(model.predict(path_1, path_2))
+    # model = siamese_dist.SignatureNet()
+    # model.load_best_model()
+    # res = model.predict(path_1, path_2)
+    # output_fn(res)
     #
     # path_2 = PREDICT_FOLDER + "m.jpg"
-    # output_fn_callback(model.predict(path_1, path_2))
+    # model.predict(path_1, path_2)
+    # output_fn(res)
 
 
 def train():
@@ -52,8 +58,6 @@ def train():
     train_test_predict_dist(logging.info)
 
 
-    # _ = SiameseModel.test_model_best_loss()
-
-
 if __name__ == '__main__':
     train()
+    # print(list(Config.divisor_generator(396))) # 486

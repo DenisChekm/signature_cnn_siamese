@@ -3,7 +3,7 @@ from PyQt6.QtGui import QPixmap
 from PyQt6.QtWidgets import QWidget, QLabel, QFileDialog, QMessageBox
 from PyQt6.uic import loadUi
 
-from model import siamese_bce
+from model import siamese_dist
 from ui.pyqt6.worker import worker_calculate_data
 
 FILE_DIALOG_IMAGES_FILTER = "Images (*.png *.jpg *.jpeg);;PNG (*.png);JPG (*.jpg);;JPEG (*.jpeg)"
@@ -25,7 +25,7 @@ class PredictWindow(QWidget):
         self.push_button_load_model.clicked.connect(self.__load_model)
         self.push_button_predict.clicked.connect(self.__make_prediction)
 
-        self.model = None #siamese_bce.SignatureNet.load_best_model()
+        self.model = None  # siamese_dist.SignatureNet.load_best_model()
 
     # def __set_enabled_train_controls(self, isEnable: bool):
     #     self.push_button_train.setEnabled(isEnable)
@@ -56,11 +56,11 @@ class PredictWindow(QWidget):
         file_name, _ = QFileDialog.getOpenFileName(self, "Выбор файла обученной модели сети", "C:/",
                                                    FILE_DIALOG_MODELS_FILTER)
         if file_name:
-            self.model = siamese_bce.SignatureNet.load_model(file_name)
+            self.model = siamese_dist.SignatureNet().load_model(file_name)
 
     def __make_prediction(self):
-        if self.image_left_filename is not None and self.image_right_filename is not None:
-            predicted_label = siamese_bce.predict(self.model, self.image_left_filename, self.image_right_filename)
+        if self.image_left_filename is not None and self.image_right_filename is not None and self.model is not None:
+            predicted_label = siamese_dist.predict(self.model, self.image_left_filename, self.image_right_filename)
             self.line_edit_prediction_result.setText(predicted_label)
             QMessageBox.information(self, "Результат", predicted_label)
         else:

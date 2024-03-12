@@ -13,7 +13,7 @@ import torch.nn.functional as nnf
 from torch.optim import Adam
 from torch.utils.data import DataLoader
 
-from model.loss.contrastive_loss import ContrastiveLoss
+# from model.loss.contrastive_loss import ContrastiveLoss
 from utils.preprocess_image import PreprocessImage
 from utils.signature_dataset import SignatureDataset
 
