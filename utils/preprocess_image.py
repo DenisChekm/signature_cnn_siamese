@@ -100,6 +100,30 @@ class PreprocessImage:
 
         return normalized_image
 
+    # unused
+    @staticmethod
+    def remove_background(img: np.ndarray) -> np.ndarray:
+        """ Remove noise using OTSU's method.
+            Parameters
+            ----------
+            img : np.ndarray
+                The image to be processed
+            Returns
+            -------
+            np.ndarray
+                The image with background removed
+            """
+
+        img = img.astype(np.uint8)
+        # Binarize the image using OTSU's algorithm. This is used to find the center
+        # of mass of the image, and find the threshold to remove background noise
+        threshold = filters.threshold_otsu(img)
+
+        # Remove noise - anything higher than the threshold. Note that the image is still grayscale
+        img[img > threshold] = 255
+
+        return img
+
     @staticmethod
     def resize_image(img: np.ndarray,
                      size: Tuple[int, int]) -> np.ndarray:
@@ -167,7 +191,7 @@ class PreprocessImage:
     def preprocess_signature(img: np.ndarray,
                              canvas_size: Tuple[int, int],
                              img_size: Tuple[int, int] = (170, 242),
-                             input_size: Tuple[int, int] = (150, 220)) -> np.ndarray:
+                             input_size: Tuple[int, int] = (155, 220)) -> np.ndarray:
         """ Pre-process a signature image, centering it in a canvas, resizing the image and cropping it.
         Parameters
         ----------
@@ -201,7 +225,7 @@ class PreprocessImage:
         return cropped
 
     @staticmethod
-    def transform_image(image_path,  canvas_size: Tuple[int, int], img_size: Tuple[int, int] = (170, 242)):
+    def transform_image(image_path, canvas_size: Tuple[int, int], img_size: Tuple[int, int] = (170, 242)):
         img = PreprocessImage.load_signature(image_path)
         img = PreprocessImage.preprocess_signature(img, canvas_size, img_size)
         return img

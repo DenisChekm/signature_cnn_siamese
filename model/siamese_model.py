@@ -1,11 +1,10 @@
-import pandas as pd
 import numpy as np
 
 import os
 import random
-import time
+from time import time
 from collections import OrderedDict
-import math
+from psutil import cpu_count
 
 import torch
 import torch.nn as nn
@@ -13,34 +12,24 @@ import torch.nn.functional as nnf
 from torch.optim import Adam
 from torch.utils.data import DataLoader
 
+from model.loss.euclidian_contrasive_loss import ContrastiveLoss
 # from model.loss.contrastive_loss import ContrastiveLoss
-from utils.preprocess_image import PreprocessImage
+from utils.average_meter import AverageMeter, time_since
 from utils.signature_dataset import SignatureDataset
+from utils.preprocess_image import PreprocessImage
 
 DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+NUM_WORKERS = cpu_count(logical=False)  # - 1
 
-# Train data
-train_csv = "../sign_data/train_data.csv"
-train_dir = "../../sign_data/train"
-train = pd.read_csv(train_csv)
-train.rename(columns={"1": "label"}, inplace=True)
-train["image_real_paths"] = train["033/02_033.png"].apply(lambda x: f"../sign_data/train/{x}")
-train["image_forged_paths"] = train["033_forg/03_0203033.PNG"].apply(lambda x: f"../sign_data/train/{x}")
-
-# Test data
-test_csv = "../sign_data/test_data.csv"
-test_dir = "../../sign_data/test"
-test = pd.read_csv(test_csv)
-test.rename(columns={"1": "label"}, inplace=True)
-test["image_real_paths"] = test["068/09_068.png"].apply(lambda x: f"../sign_data/test/{x}")
-test["image_forged_paths"] = test["068_forg/03_0113068.PNG"].apply(lambda x: f"../sign_data/test/{x}")
-
-# ====================================================
-# Directory settings
-# ====================================================
-OUTPUT_DIR = '../'
+OUTPUT_DIR = "./savedmodels/"
 if not os.path.exists(OUTPUT_DIR):
     os.makedirs(OUTPUT_DIR)
+BEST_MODEL = OUTPUT_DIR + 'best_loss.pt'
+
+contrastive_loss = ContrastiveLoss()
+
+
+# THRESHOLD = 0.5
 
 
 class Config:
@@ -50,7 +39,6 @@ class Config:
     WEIGHT_DECAY = 1e-3
     EPOCHS = 20
     BATCH_SIZE = 32
-    NUM_WORKERS = 4
     PRINT_FREQ = 50  # 100
     CANVAS_SIZE = (952, 1360)
     GRADIENT_ACCUMULATION_STEPS = 1
@@ -65,41 +53,6 @@ def seed_torch(seed):
     torch.manual_seed(seed)
     torch.cuda.manual_seed(seed)
     torch.backends.cudnn.deterministic = True
-
-
-# ====================================================
-# Helper functions
-# ====================================================
-class AverageMeter(object):
-    """Computes and stores the average and current value"""
-
-    def __init__(self):
-        self.val = 0
-        self.avg = 0
-        self.sum = 0
-        self.count = 0
-        self.list = []
-
-    def update(self, val, n=1):
-        self.val = val
-        self.sum += val * n
-        self.count += n
-        self.avg = self.sum / self.count
-        self.list.append(val * n)
-
-
-def as_minutes(s):
-    m = math.floor(s / 60)
-    s -= m * 60
-    return '%dm %ds' % (m, s)
-
-
-def time_since(since, percent):
-    now = time.time()
-    s = now - since
-    es = s / percent
-    rs = es - s
-    return '%s (remain %s)' % (as_minutes(s), as_minutes(rs))
 
 
 def conv_bn_mish(in_channels, out_channels, kernel_size, stride=1, pad=0):
@@ -150,12 +103,6 @@ def linear_block(in_features, out_features):
     ]))
 
 
-# def init_weights(model: nn.Module):
-#     print(model.modules())
-#     for module in model.modules():
-#         print(module)
-#         if isinstance(module, (nn.Linear, nn.Conv2d)):
-#             nn.init.kaiming_normal_(module.weight, nonlinearity='relu')
 def flatten_model(modules):
     def flatten_list(_2d_list):
         flat_list = []
@@ -183,19 +130,6 @@ def flatten_model(modules):
         except:
             ret.append(modules)
     return flatten_list(ret)
-
-
-def prin_layers_info(model):
-    target_layers = []
-    module_list = [module for module in model.modules()]  # this is needed
-    flatted_list = flatten_model(module_list)
-
-    for count, value in enumerate(flatted_list):
-
-        if isinstance(value, (nn.Conv2d, nn.MaxPool2d, nn.BatchNorm2d, nn.Linear)):
-            # if isinstance(value, (nn.Conv2d)):
-            print(count, value)
-            target_layers.append(value)
 
 
 def init_weight_in_layers(model: nn.Module):
@@ -284,20 +218,17 @@ class SiameseModel(nn.Module):
         else:
             # Classification
             output = torch.cat([embedding1, embedding2], dim=1)
-            print(output.shape)
+            # print(output.shape)
             output = self.probs(output)
             return embedding1, embedding2, output
 
     @staticmethod
     def __train_epoch(train_loader, model, criterion, optimizer, epoch):
-        data_time = AverageMeter()
         losses = AverageMeter()
+        start = time()
 
         model.train()
-
-        start = end = time.time()
         for step, (img1, img2, labels) in enumerate(train_loader):
-            data_time.update(time.time() - end)
             img1 = img1.to(DEVICE).float()
             img2 = img2.to(DEVICE).float()
             labels = labels.to(DEVICE)
@@ -316,7 +247,6 @@ class SiameseModel(nn.Module):
                 optimizer.step()
                 optimizer.zero_grad()
 
-            end = time.time()
             if step % Config.PRINT_FREQ == 0 or step == (len(train_loader) - 1):
                 print(f'Epoch: [{epoch}][{step}/{len(train_loader)}] ', end='')
                 print(f'Elapsed: {time_since(start, float(step + 1) / len(train_loader))} ', end='')
@@ -328,11 +258,9 @@ class SiameseModel(nn.Module):
     @staticmethod
     def train_model():
         seed_torch(seed=Config.SEED)
-        train_dataset = SignatureDataset(train, Config.CANVAS_SIZE, dim=(256, 256))
-        train_loader = DataLoader(train_dataset,
-                                  batch_size=Config.BATCH_SIZE,
-                                  shuffle=True,
-                                  num_workers=Config.NUM_WORKERS, pin_memory=True, drop_last=True)
+        train_dataset = SignatureDataset("train", Config.CANVAS_SIZE, dim=(256, 256))
+        train_loader = DataLoader(train_dataset, batch_size=Config.BATCH_SIZE, shuffle=True,
+                                  num_workers=NUM_WORKERS, pin_memory=True, drop_last=True)
 
         model = SiameseModel().to(DEVICE)
 
@@ -340,15 +268,12 @@ class SiameseModel(nn.Module):
         contrastive = ContrastiveLoss()
 
         best_loss = np.inf
-
         std_losses = []
 
         for epoch in range(Config.EPOCHS):
-            start_time = time.time()
-
+            start_time = time()
             avg_train_loss, losses_list = SiameseModel.__train_epoch(train_loader, model, contrastive, optimizer, epoch)
-
-            elapsed = time.time() - start_time
+            elapsed = time() - start_time
 
             std = np.std(losses_list)
             std_losses.append(std)
@@ -365,11 +290,9 @@ class SiameseModel(nn.Module):
     @staticmethod
     def train_model_by_params(batch_size, lr, epochs_count):
         seed_torch(seed=Config.SEED)
-        train_dataset = SignatureDataset(train, Config.CANVAS_SIZE, dim=(256, 256))
-        train_loader = DataLoader(train_dataset,
-                                  batch_size=batch_size,
-                                  shuffle=True,
-                                  num_workers=Config.NUM_WORKERS, pin_memory=True, drop_last=True)
+        train_dataset = SignatureDataset("train", Config.CANVAS_SIZE, dim=(256, 256))
+        train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True,
+                                  num_workers=NUM_WORKERS, pin_memory=True, drop_last=True)
 
         model = SiameseModel().to(DEVICE)
 
@@ -381,11 +304,9 @@ class SiameseModel(nn.Module):
         std_losses = []
 
         for epoch in range(epochs_count):
-            start_time = time.time()
-
+            start_time = time()
             avg_train_loss, losses_list = SiameseModel.__train_epoch(train_loader, model, contrastive, optimizer, epoch)
-
-            elapsed = time.time() - start_time
+            elapsed = time() - start_time
 
             std = np.std(losses_list)
             std_losses.append(std)
@@ -433,19 +354,15 @@ class SiameseModel(nn.Module):
             model.load_state_dict(
                 torch.load(f'{Config.MODEL_NAME}_best_loss.pt', map_location=torch.device('cpu'))['model'])
 
-        test_dataset = SignatureDataset(test, Config.CANVAS_SIZE, dim=(256, 256))
-        test_loader = DataLoader(test_dataset,
-                                 batch_size=1,
-                                 shuffle=True,
-                                 num_workers=Config.NUM_WORKERS, pin_memory=True, drop_last=True)
+        test_dataset = SignatureDataset("test", Config.CANVAS_SIZE, dim=(256, 256))
+        test_loader = DataLoader(test_dataset, batch_size=1, shuffle=True, num_workers=NUM_WORKERS, pin_memory=True,
+                                 drop_last=True)
 
-        counter_simple = 0
-        counter_advance = 0
-        counter_advance_2 = 0
+        counter_simple, counter_advance, counter_advance_2 = 0, 0, 0
 
         label_dict = {1.0: 'Forged', 0.0: 'Original'}
-        model.eval()
         samples_count = len(test_loader)
+        model.eval()
         for i, data in enumerate(test_loader, 0):
             img1, img2, label = data
             label = label_dict[label.item()]
@@ -483,7 +400,7 @@ class SiameseModel(nn.Module):
             model.load_state_dict(
                 torch.load('../best_loss.pt', map_location=torch.device('cpu'))['model'])
 
-        test_dataset = SignatureDataset(test, Config.CANVAS_SIZE, dim=(256, 256))
+        test_dataset = SignatureDataset("test", Config.CANVAS_SIZE, dim=(256, 256))
         test_loader = DataLoader(test_dataset,
                                  batch_size=1,
                                  shuffle=True,
@@ -611,17 +528,13 @@ class SiameseModel(nn.Module):
     @staticmethod
     def train_with_test():
         seed_torch(seed=Config.SEED)
-        train_dataset = SignatureDataset(train, Config.CANVAS_SIZE, dim=(256, 256))
-        train_loader = DataLoader(train_dataset,
-                                  batch_size=Config.BATCH_SIZE,
-                                  shuffle=True,
+        train_dataset = SignatureDataset("train", Config.CANVAS_SIZE, dim=(256, 256))
+        train_loader = DataLoader(train_dataset, batch_size=Config.BATCH_SIZE, shuffle=True,
                                   num_workers=Config.NUM_WORKERS, pin_memory=True, drop_last=True)
 
-        test_dataset = SignatureDataset(test, Config.CANVAS_SIZE, dim=(256, 256))
-        test_loader = DataLoader(test_dataset,
-                                 batch_size=1,
-                                 shuffle=True,
-                                 num_workers=Config.NUM_WORKERS, pin_memory=True, drop_last=True)
+        test_dataset = SignatureDataset("test", Config.CANVAS_SIZE, dim=(256, 256))
+        test_loader = DataLoader(test_dataset, batch_size=1, shuffle=True, num_workers=Config.NUM_WORKERS,
+                                 pin_memory=True, drop_last=True)
 
         model = SiameseModel().to(DEVICE)
 

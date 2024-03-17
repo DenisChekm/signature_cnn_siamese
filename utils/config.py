@@ -1,11 +1,26 @@
+import torch
+
+import numpy as np
+
 from math import sqrt
+import os
+import random
 
 
 class Config:
     SEED = 42
     CANVAS_SIZE = (952, 1360)
     EARLY_STOPPING_EPOCH = 7
-    PRINT_FREQ = 66  # 54
+    PRINT_FREQ = 66  # для balanced  # 54
+    THRESHOLD = 0.5
+
+    # Trash:
+    projection2d = True
+    LEARNING_RATE = 1e-3
+    WEIGHT_DECAY = 1e-3
+    GRADIENT_ACCUMULATION_STEPS = 1
+    MAX_GRAD_NORM = 1000
+    MODEL_NAME = "siamnet"
 
     @staticmethod
     def divisor_generator(n):
@@ -17,3 +32,13 @@ class Config:
                     large_divisors.append(n / i)
         for divisor in reversed(large_divisors):
             yield divisor
+
+    @staticmethod
+    def seed_torch():
+        seed = Config.SEED
+        random.seed(seed)
+        os.environ['PYTHONHASHSEED'] = str(seed)
+        np.random.seed(seed)
+        torch.manual_seed(seed)
+        torch.cuda.manual_seed(seed)
+        torch.backends.cudnn.deterministic = True
