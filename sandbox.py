@@ -28,6 +28,9 @@ def predict_my_signature(model, output_fn):
     res = model.predict(path_1, path_2)
     output_fn(res)
 
+    res = model.predict(path_1, path_1)
+    output_fn(res)
+
 
 def train_test_predict_bce(output_fn_callback):
     siamese_bce.fit(BATCH_SIZE, EPOCHS, output_fn_callback)

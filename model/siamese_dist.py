@@ -71,58 +71,58 @@ class SignatureNet(Module):
         super(SignatureNet, self).__init__()
 
         # Alexnet
-        # self.conv = Sequential(
-        #     conv_block(1, 96, 11, stride=4),  # stride=1),
-        #     MaxPool2d(3, 2),
-        #     conv_block(96, 256, 5, stride=1, padding=2),
-        #     MaxPool2d(3, 2),
-        #     conv_block(256, 384, 3, padding=1),
-        #     conv_block(384, 256, 3, padding=1),
-        #     MaxPool2d(3, 2)
-        # )
-        #
-        # _adaptive_output = 6
-        # self.adap_avg_pool = AdaptiveAvgPool2d(_adaptive_output)
-        #
-        # self.fc = Sequential(
-        #     linear_block(256 * _adaptive_output * _adaptive_output, 1024),
-        #     Dropout(p=0.5),
-        #     linear_block(1024, 128)
-        # )
-
-        # Vgg16
         self.conv = Sequential(
-            conv_block(1, 64, 3, stride=1, padding=1),
-            conv_block(64, 64, 3, stride=1, padding=1),
-            MaxPool2d(2, 2),
-
-            conv_block(64, 128, 3, stride=1, padding=1),
-            conv_block(128, 128, 3, stride=1, padding=1),
-            MaxPool2d(2, 2),
-
-            conv_block(128, 256, 3, stride=1, padding=1),
-            conv_block(256, 256, 3, stride=1, padding=1),
-            conv_block(256, 256, 3, stride=1, padding=1),
-            MaxPool2d(2, 2),
-
-            conv_block(256, 512, 3, stride=1, padding=1),
-            conv_block(512, 512, 3, stride=1, padding=1),
-            conv_block(512, 512, 3, stride=1, padding=1),
-            MaxPool2d(2, 2),
-
-            conv_block(512, 512, 3, stride=1, padding=1),
-            conv_block(512, 512, 3, stride=1, padding=1),
-            conv_block(512, 512, 3, stride=1, padding=1),
-            MaxPool2d(2, 2)
+            conv_block(1, 96, 11, stride=4),  # stride=1),
+            MaxPool2d(3, 2),
+            conv_block(96, 256, 5, stride=1, padding=2),
+            MaxPool2d(3, 2),
+            conv_block(256, 384, 3, padding=1),
+            conv_block(384, 256, 3, padding=1),
+            MaxPool2d(3, 2)
         )
 
-        self.adap_avg_pool = AdaptiveAvgPool2d(7)
+        _adaptive_output = 6
+        self.adap_avg_pool = AdaptiveAvgPool2d(_adaptive_output)
 
         self.fc = Sequential(
-            linear_block(512 * 7 * 7, 1024),
+            linear_block(256 * _adaptive_output * _adaptive_output, 1024),
             Dropout(p=0.5),
             linear_block(1024, 128)
         )
+
+        # Vgg16
+        # self.conv = Sequential(
+        #     conv_block(1, 64, 3, stride=1, padding=1),
+        #     conv_block(64, 64, 3, stride=1, padding=1),
+        #     MaxPool2d(2, 2),
+        #
+        #     conv_block(64, 128, 3, stride=1, padding=1),
+        #     conv_block(128, 128, 3, stride=1, padding=1),
+        #     MaxPool2d(2, 2),
+        #
+        #     conv_block(128, 256, 3, stride=1, padding=1),
+        #     conv_block(256, 256, 3, stride=1, padding=1),
+        #     conv_block(256, 256, 3, stride=1, padding=1),
+        #     MaxPool2d(2, 2),
+        #
+        #     conv_block(256, 512, 3, stride=1, padding=1),
+        #     conv_block(512, 512, 3, stride=1, padding=1),
+        #     conv_block(512, 512, 3, stride=1, padding=1),
+        #     MaxPool2d(2, 2),
+        #
+        #     conv_block(512, 512, 3, stride=1, padding=1),
+        #     conv_block(512, 512, 3, stride=1, padding=1),
+        #     conv_block(512, 512, 3, stride=1, padding=1),
+        #     MaxPool2d(2, 2)
+        # )
+        #
+        # self.adap_avg_pool = AdaptiveAvgPool2d(7)
+        #
+        # self.fc = Sequential(
+        #     linear_block(512 * 7 * 7, 1024),
+        #     Dropout(p=0.5),
+        #     linear_block(1024, 128)
+        # )
 
         self.euclidean_distance = PairwiseDistance()
 

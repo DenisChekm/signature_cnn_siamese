@@ -10,7 +10,7 @@ import random
 class Config:
     SEED = 42
     CANVAS_SIZE = (952, 1360)
-    EARLY_STOPPING_EPOCH = 7
+    EARLY_STOPPING_EPOCH = 10  # 7
     PRINT_FREQ = 66  # для balanced dataset
     # 54 для no_balanced dataset
     THRESHOLD = 0.5
